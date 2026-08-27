@@ -12,16 +12,27 @@ export async function POST(request) {
     const body = await request.json();
     const { action, email, password, fullName, businessName } = body;
 
+    const cleanEmail = email ? email.toLowerCase().trim() : '';
+
     // ----------------------------------------------------
-    // 1. SIGNUP & WORKSPACE PROVISIONING
+    // 1. SIGNUP & WORKSPACE AUTO-PROVISIONING
     // ----------------------------------------------------
     if (action === 'signup') {
-      if (!email || !password || !fullName) {
+      if (!cleanEmail || !password || !fullName) {
         return NextResponse.json({ success: false, error: 'Full Name, Email, and Password are required.' }, { status: 400 });
       }
 
       // Check if user already exists
-      const existingUser = await db.select().from(users).where(eq(users.email, email.toLowerCase().trim())).then((r) => r[0]);
+      const existingUser = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, cleanEmail))
+        .then((r) => r[0])
+        .catch((err) => {
+          logger.error('DB query error checking existing user on signup', err);
+          return null;
+        });
+
       if (existingUser) {
         return NextResponse.json({ success: false, error: 'An account with this email already exists.' }, { status: 400 });
       }
@@ -36,7 +47,7 @@ export async function POST(request) {
       // Insert User
       await db.insert(users).values({
         id: userId,
-        email: email.toLowerCase().trim(),
+        email: cleanEmail,
         passwordHash: hashedPassword,
         fullName,
         role: 'user',
@@ -88,18 +99,17 @@ export async function POST(request) {
 
       logger.info(`New SaaS Signup & Workspace Provisioned: ${companyName} (${workspaceId})`);
 
-      // Generate JWT Token
       const token = signJwtToken({
         userId,
         workspaceId,
-        email,
+        email: cleanEmail,
         role: 'owner',
       });
 
       const response = NextResponse.json({
         success: true,
         message: 'Account created successfully!',
-        user: { id: userId, email, fullName, workspaceId },
+        user: { id: userId, email: cleanEmail, fullName, workspaceId },
       });
 
       response.cookies.set('kivo_session', token, {
@@ -117,11 +127,20 @@ export async function POST(request) {
     // 2. LOGIN
     // ----------------------------------------------------
     if (action === 'login') {
-      if (!email || !password) {
+      if (!cleanEmail || !password) {
         return NextResponse.json({ success: false, error: 'Email and password required.' }, { status: 400 });
       }
 
-      const user = await db.select().from(users).where(eq(users.email, email.toLowerCase().trim())).then((r) => r[0]);
+      const user = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, cleanEmail))
+        .then((r) => r[0])
+        .catch((err) => {
+          logger.error('DB query error during login', err);
+          return null;
+        });
+
       if (!user) {
         return NextResponse.json({ success: false, error: 'Invalid email or password.' }, { status: 401 });
       }
@@ -131,12 +150,12 @@ export async function POST(request) {
         return NextResponse.json({ success: false, error: 'Invalid email or password.' }, { status: 401 });
       }
 
-      // Fetch user's primary workspace
       const userWorkspace = await db
         .select()
         .from(workspaces)
         .where(eq(workspaces.ownerId, user.id))
-        .then((r) => r[0]);
+        .then((r) => r[0])
+        .catch(() => null);
 
       const workspaceId = userWorkspace?.id || 'ws_fancy_1';
 
