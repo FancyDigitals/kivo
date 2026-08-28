@@ -14,6 +14,9 @@ import {
   Plus,
   Trash2,
   CheckCircle2,
+  Smartphone,
+  ExternalLink,
+  Phone,
 } from 'lucide-react';
 import { BRAND } from '@/config/brand';
 import { AI_MODELS } from '@/config/providers';
@@ -32,6 +35,8 @@ export default function CustomizeBotPage({ params }) {
     industry: 'business',
     personality: 'professional',
     language: 'en',
+    whatsappNumber: '+2348000000000',
+    phoneNumberId: '',
     primaryProvider: 'groq',
     primaryModel: 'llama-3.1-8b-instant',
     fallbackProvider: 'gemini',
@@ -55,7 +60,12 @@ export default function CustomizeBotPage({ params }) {
         const res = await fetch(`/api/bots/${botId}`);
         const data = await res.json();
         if (data.success && data.data) {
-          setFormData((prev) => ({ ...prev, ...data.data }));
+          setFormData((prev) => ({ 
+            ...prev, 
+            ...data.data,
+            // Fallback to existing phone number if available
+            whatsappNumber: data.data.whatsappNumber || data.data.phoneNumber || prev.whatsappNumber
+          }));
         }
       } catch (err) {
         console.error('Failed to load bot:', err);
@@ -65,7 +75,7 @@ export default function CustomizeBotPage({ params }) {
   }, [botId]);
 
   const handleSave = async (e) => {
-    e.preventDefault();
+    e?.preventDefault();
     setIsSaving(true);
     setSaveSuccess(false);
 
@@ -107,35 +117,44 @@ export default function CustomizeBotPage({ params }) {
     }));
   };
 
+  // Helper for direct WhatsApp test link
+  const cleanPhone = (formData.whatsappNumber || '').replace(/[^0-9]/g, '');
+  const testChatUrl = cleanPhone 
+    ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent('Hello! Testing the bot.')}`
+    : '#';
+
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      {/* Top Bar */}
+    <div className="max-w-5xl mx-auto space-y-6 px-1 sm:px-0">
+      
+      {/* ---------- TOP BAR ---------- */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Link
             href="/bots"
-            className="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-slate-900 shadow-sm"
+            className="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-slate-900 transition-colors shadow-sm"
           >
             <ArrowLeft className="w-4 h-4" />
           </Link>
           <div>
-            <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 flex items-center gap-2 tracking-tight">
               Customize — {formData.name}
             </h1>
-            <p className="text-xs text-slate-500">Tune AI behavior, conversation rules, and provider choices.</p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Tune AI behavior, phone numbers, conversation rules, and provider choices.
+            </p>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
           {saveSuccess && (
             <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
-              <CheckCircle2 className="w-4 h-4" /> Saved Successfully!
+              <CheckCircle2 className="w-4 h-4" /> Changes Saved!
             </span>
           )}
           <button
             onClick={handleSave}
             disabled={isSaving}
-            className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold flex items-center gap-2 shadow-md transition-all"
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-all"
           >
             <Save className="w-4 h-4" />
             {isSaving ? 'Saving Changes...' : 'Save Configuration'}
@@ -143,8 +162,8 @@ export default function CustomizeBotPage({ params }) {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-slate-200 text-sm font-semibold gap-6">
+      {/* ---------- RESPONSIVE TABS ---------- */}
+      <div className="flex border-b border-slate-200 text-xs sm:text-sm font-semibold gap-4 sm:gap-6 overflow-x-auto whitespace-nowrap scrollbar-none">
         <button
           onClick={() => setActiveTab('general')}
           className={`pb-3 border-b-2 transition-colors flex items-center gap-2 ${
@@ -155,6 +174,18 @@ export default function CustomizeBotPage({ params }) {
         >
           <Sliders className="w-4 h-4" />
           Personality & Messages
+        </button>
+
+        <button
+          onClick={() => setActiveTab('whatsapp')}
+          className={`pb-3 border-b-2 transition-colors flex items-center gap-2 ${
+            activeTab === 'whatsapp'
+              ? 'border-emerald-500 text-emerald-600'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          <Smartphone className="w-4 h-4" />
+          WhatsApp Line & Number
         </button>
 
         <button
@@ -182,9 +213,11 @@ export default function CustomizeBotPage({ params }) {
         </button>
       </div>
 
-      {/* TAB 1: General Personality & Messages */}
+      {/* ========================================================= */}
+      {/*         TAB 1: GENERAL PERSONALITY & MESSAGES             */}
+      {/* ========================================================= */}
       {activeTab === 'general' && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-6">
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-sm space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Bot Name</label>
@@ -192,7 +225,7 @@ export default function CustomizeBotPage({ params }) {
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
             </div>
 
@@ -202,7 +235,7 @@ export default function CustomizeBotPage({ params }) {
                 type="text"
                 value={formData.businessName}
                 onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
             </div>
           </div>
@@ -213,7 +246,7 @@ export default function CustomizeBotPage({ params }) {
               <select
                 value={formData.personality}
                 onChange={(e) => setFormData({ ...formData, personality: e.target.value })}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
               >
                 {BRAND.personalities.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -228,7 +261,7 @@ export default function CustomizeBotPage({ params }) {
               <select
                 value={formData.language}
                 onChange={(e) => setFormData({ ...formData, language: e.target.value })}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
               >
                 {BRAND.languages.map((l) => (
                   <option key={l.id} value={l.id}>
@@ -245,7 +278,7 @@ export default function CustomizeBotPage({ params }) {
               rows={3}
               value={formData.welcomeMessage}
               onChange={(e) => setFormData({ ...formData, welcomeMessage: e.target.value })}
-              className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
 
@@ -255,19 +288,104 @@ export default function CustomizeBotPage({ params }) {
               rows={2}
               value={formData.fallbackMessage}
               onChange={(e) => setFormData({ ...formData, fallbackMessage: e.target.value })}
-              className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
         </div>
       )}
 
-      {/* TAB 2: AI Gateway & Providers */}
+      {/* ========================================================= */}
+      {/*         TAB 2: WHATSAPP LINE & PHONE NUMBER               */}
+      {/* ========================================================= */}
+      {activeTab === 'whatsapp' && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-sm space-y-6">
+          <div className="space-y-1">
+            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Smartphone className="w-5 h-5 text-emerald-600" />
+              Connected WhatsApp Line
+            </h2>
+            <p className="text-xs text-slate-500">
+              Specify the exact WhatsApp phone number your customers use to contact this bot.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                WhatsApp Phone Number (with Country Code)
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. +234 812 345 6789"
+                value={formData.whatsappNumber || ''}
+                onChange={(e) => setFormData({ ...formData, whatsappNumber: e.target.value })}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+              <p className="text-[11px] text-slate-400 mt-1">
+                Include country code without special characters (e.g. +234, +1, +44).
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                Meta Phone Number ID (Optional / Auto-Managed)
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. 109283746592812"
+                value={formData.phoneNumberId || ''}
+                onChange={(e) => setFormData({ ...formData, phoneNumberId: e.target.value })}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+              <p className="text-[11px] text-slate-400 mt-1">
+                Managed automatically when using 1-Click Embedded signup.
+              </p>
+            </div>
+          </div>
+
+          {/* Test Link Card */}
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <span className="text-xs font-bold text-slate-800">Direct WhatsApp Chat URL:</span>
+              <p className="text-xs font-mono text-emerald-700 truncate mt-0.5">
+                {cleanPhone ? `https://wa.me/${cleanPhone}` : 'Please enter a phone number above'}
+              </p>
+            </div>
+
+            {cleanPhone ? (
+              <a
+                href={testChatUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-all shrink-0"
+              >
+                <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                Test Chat on WhatsApp
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            ) : null}
+          </div>
+
+          <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+            <Link
+              href={`/bots/${botId}/whatsapp`}
+              className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
+            >
+              Open Full QR Code & Setup Page &rarr;
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/*         TAB 3: AI GATEWAY & MODELS                        */}
+      {/* ========================================================= */}
       {activeTab === 'ai' && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-6">
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-sm space-y-6">
           <div className="p-4 rounded-xl bg-slate-900 text-white text-xs space-y-1">
             <p className="font-bold text-emerald-400">Multi-Provider AI Gateway Active</p>
             <p className="text-slate-300">
-              Kivo will automatically try your Primary Provider first. If rate-limited or unavailable, it seamlessly fails over to your Fallback Provider.
+              The engine automatically tries your Primary Provider first. If rate-limited or unavailable, it seamlessly fails over to your Fallback Provider.
             </p>
           </div>
 
@@ -277,7 +395,7 @@ export default function CustomizeBotPage({ params }) {
               <select
                 value={formData.primaryProvider}
                 onChange={(e) => setFormData({ ...formData, primaryProvider: e.target.value })}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 capitalize"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 capitalize"
               >
                 <option value="groq">Groq (Ultra-Fast Llama)</option>
                 <option value="gemini">Google Gemini</option>
@@ -290,7 +408,7 @@ export default function CustomizeBotPage({ params }) {
               <select
                 value={formData.fallbackProvider}
                 onChange={(e) => setFormData({ ...formData, fallbackProvider: e.target.value })}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 capitalize"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 capitalize"
               >
                 <option value="gemini">Google Gemini</option>
                 <option value="groq">Groq</option>
@@ -300,7 +418,9 @@ export default function CustomizeBotPage({ params }) {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Temperature (Creativity: {formData.temperature})</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Temperature (Creativity: {formData.temperature})
+            </label>
             <input
               type="range"
               min="0.0"
@@ -319,9 +439,11 @@ export default function CustomizeBotPage({ params }) {
         </div>
       )}
 
-      {/* TAB 3: Rules & Directives */}
+      {/* ========================================================= */}
+      {/*         TAB 4: RULES & DIRECTIVES                         */}
+      {/* ========================================================= */}
       {activeTab === 'rules' && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-6">
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-sm space-y-6">
           {/* Objectives */}
           <div>
             <h3 className="font-bold text-sm text-slate-900 mb-2">Bot Objectives</h3>

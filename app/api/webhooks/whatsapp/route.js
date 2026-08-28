@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { customers, conversations, messages, bots, whatsappAccounts } from '@/lib/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { customers, conversations, messages, bots } from '@/lib/db/schema';
+import { eq, and, or } from 'drizzle-orm';
 import { generateAiResponse } from '@/lib/ai/gateway';
 import { buildSystemPrompt } from '@/lib/ai/prompts/builder';
 import { buildKnowledgeContext, buildProductContext } from '@/lib/knowledge/retrieval';
@@ -40,6 +40,7 @@ export async function POST(request) {
     const value = changes?.value;
     const incomingMessage = value?.messages?.[0];
     const contactInfo = value?.contacts?.[0];
+    const metaMetadata = value?.metadata; // Contains phone_number_id & display_phone_number
 
     if (!incomingMessage) {
       // Event status update (read/delivered receipt)
@@ -55,19 +56,35 @@ export async function POST(request) {
     const fromPhone = sanitizePhone(incomingMessage.from);
     const customerName = contactInfo?.profile?.name || `Customer ${fromPhone.slice(-4)}`;
     const userMessageText = incomingMessage.text?.body || '';
+    const incomingPhoneId = metaMetadata?.phone_number_id;
+    const displayPhoneNumber = metaMetadata?.display_phone_number;
 
-    logger.info(`Live WhatsApp Message received from ${fromPhone}: "${userMessageText}"`);
+    logger.info(`Live WhatsApp Message from ${fromPhone} to Meta Phone ID ${incomingPhoneId}: "${userMessageText}"`);
 
-    // Target default workspace & bot for this account
-    const workspaceId = 'ws_fancy_1';
-    const activeBot = await db.select().from(bots).where(eq(bots.workspaceId, workspaceId)).then((r) => r[0]);
+    // A. Dynamic Bot Lookup (Match by phone_number_id or whatsappNumber, else fallback to latest bot)
+    let activeBot = null;
+
+    if (incomingPhoneId) {
+      activeBot = await db.select().from(bots).where(eq(bots.phoneNumberId, incomingPhoneId)).then((r) => r[0]);
+    }
+
+    if (!activeBot && displayPhoneNumber) {
+      activeBot = await db.select().from(bots).where(eq(bots.whatsappNumber, displayPhoneNumber)).then((r) => r[0]);
+    }
 
     if (!activeBot) {
-      logger.warn('No active bot configured for incoming WhatsApp webhook');
+      // Fallback: pick the first available bot in DB
+      activeBot = await db.select().from(bots).then((r) => r[0]);
+    }
+
+    if (!activeBot) {
+      logger.warn('No active bot configured in database to handle incoming WhatsApp message');
       return NextResponse.json({ status: 'no_active_bot' }, { status: 200 });
     }
 
-    // A. Upsert Customer Profile in Neon DB
+    const workspaceId = activeBot.workspaceId;
+
+    // B. Upsert Customer Profile
     let customer = await db.select().from(customers).where(and(eq(customers.workspaceId, workspaceId), eq(customers.phoneNumber, fromPhone))).then((r) => r[0]);
 
     if (!customer) {
@@ -82,7 +99,7 @@ export async function POST(request) {
       await db.insert(customers).values(customer);
     }
 
-    // B. Upsert Conversation Thread in Neon DB
+    // C. Upsert Conversation Thread
     let conv = await db.select().from(conversations).where(and(eq(conversations.workspaceId, workspaceId), eq(conversations.customerId, customer.id))).then((r) => r[0]);
 
     if (!conv) {
@@ -100,7 +117,7 @@ export async function POST(request) {
       await db.insert(conversations).values(conv);
     }
 
-    // C. Save Customer Message to DB
+    // D. Save Customer Message
     await db.insert(messages).values({
       id: generateId('msg'),
       workspaceId,
@@ -111,25 +128,25 @@ export async function POST(request) {
       externalMessageId: messageId,
     });
 
-    // D. Human Handoff Check
+    // E. Human Handoff Check
     const handoffKeywords = activeBot.handoffKeywords || ['human', 'agent', 'support', 'manager'];
     const needsHandoff = handoffKeywords.some((kw) => userMessageText.toLowerCase().includes(kw));
 
     if (needsHandoff || conv.mode === 'human') {
-      logger.info(`Human handoff active for ${fromPhone}`);
+      logger.info(`Human handoff triggered for ${fromPhone}`);
       
-      // Update thread mode to human
       await db.update(conversations).set({ mode: 'human', lastMessageSnippet: userMessageText, updatedAt: new Date() }).where(eq(conversations.id, conv.id));
 
       await sendWhatsAppTextMessage({
         to: fromPhone,
         text: `I've connected you with a human representative from *${activeBot.businessName}*. A team member will reply shortly!`,
+        phoneNumberId: activeBot.phoneNumberId || incomingPhoneId,
       });
 
       return NextResponse.json({ status: 'human_handoff_active' }, { status: 200 });
     }
 
-    // E. Execute AI Gateway Response
+    // F. Execute AI Gateway Response
     const knowledgeItems = Array.from(knowledgeStore.values());
     const productItems = Array.from(productsStore.values());
 
@@ -159,7 +176,7 @@ export async function POST(request) {
       botId: activeBot.id,
     });
 
-    // F. Save AI Message to DB & Reply via Meta Cloud API
+    // G. Save AI Message & Reply via Meta Cloud API
     await db.insert(messages).values({
       id: generateId('msg'),
       workspaceId,
@@ -174,6 +191,7 @@ export async function POST(request) {
     await sendWhatsAppTextMessage({
       to: fromPhone,
       text: aiResult.text,
+      phoneNumberId: activeBot.phoneNumberId || incomingPhoneId,
     });
 
     return NextResponse.json({ success: true, status: 'processed' }, { status: 200 });

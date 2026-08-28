@@ -10,12 +10,11 @@ export async function GET(request, { params }) {
     const resolvedParams = await params;
     const botId = resolvedParams?.botId;
 
-    let botRecord = await db.select().from(bots).where(eq(bots.id, botId)).then((res) => res[0]);
-
-    if (!botRecord) {
-      // Fallback query demo bot
-      botRecord = await db.select().from(bots).where(eq(bots.id, 'bot_demo_1')).then((res) => res[0]);
+    if (!botId) {
+      return NextResponse.json({ success: false, error: 'Bot ID required' }, { status: 400 });
     }
+
+    let botRecord = await db.select().from(bots).where(eq(bots.id, botId)).then((res) => res[0]);
 
     if (!botRecord) {
       return NextResponse.json({ success: false, error: 'Bot not found' }, { status: 404 });
@@ -24,46 +23,55 @@ export async function GET(request, { params }) {
     return NextResponse.json({ success: true, data: botRecord });
   } catch (error) {
     logger.error('Error fetching bot details from DB', error);
-    return NextResponse.json({ success: false, error: 'Bot not found' }, { status: 404 });
+    return NextResponse.json({ success: false, error: error.message || 'Bot not found' }, { status: 500 });
   }
 }
 
 export async function PUT(request, { params }) {
   try {
     const resolvedParams = await params;
-    const botId = resolvedParams?.botId || 'bot_demo_1';
+    const botId = resolvedParams?.botId;
     const body = await request.json();
 
-    logger.info(`Updating bot configuration in DB for botId: ${botId}`);
+    if (!botId) {
+      return NextResponse.json({ success: false, error: 'Bot ID is required' }, { status: 400 });
+    }
 
     const existingBot = await db.select().from(bots).where(eq(bots.id, botId)).then((res) => res[0]);
 
+    if (!existingBot) {
+      return NextResponse.json({ success: false, error: 'Bot not found' }, { status: 404 });
+    }
+
     const updatedSystemPrompt = buildSystemPrompt({
-      botName: body.name || existingBot?.name || 'Fancy Assistant',
-      businessName: body.businessName || existingBot?.businessName || 'Fancy Digitals',
-      industry: body.industry || existingBot?.industry || 'business',
-      personality: body.personality || existingBot?.personality || 'professional',
-      language: body.language || existingBot?.language || 'en',
-      objectives: body.objectives || existingBot?.objectives || [],
-      rules: body.rules || existingBot?.rules || [],
-      restrictions: body.restrictions || existingBot?.restrictions || [],
+      botName: body.name || existingBot.name || 'Fancy Assistant',
+      businessName: body.businessName || existingBot.businessName || 'Fancy Digitals',
+      industry: body.industry || existingBot.industry || 'business',
+      personality: body.personality || existingBot.personality || 'professional',
+      language: body.language || existingBot.language || 'en',
+      objectives: body.objectives || existingBot.objectives || [],
+      rules: body.rules || existingBot.rules || [],
+      restrictions: body.restrictions || existingBot.restrictions || [],
     });
 
     const updateData = {
-      name: body.name ?? existingBot?.name,
-      businessName: body.businessName ?? existingBot?.businessName,
-      personality: body.personality ?? existingBot?.personality,
-      language: body.language ?? existingBot?.language,
-      primaryProvider: body.primaryProvider ?? existingBot?.primaryProvider,
-      primaryModel: body.primaryModel ?? existingBot?.primaryModel,
-      fallbackProvider: body.fallbackProvider ?? existingBot?.fallbackProvider,
-      fallbackModel: body.fallbackModel ?? existingBot?.fallbackModel,
-      temperature: String(body.temperature ?? existingBot?.temperature ?? '0.3'),
-      welcomeMessage: body.welcomeMessage ?? existingBot?.welcomeMessage,
-      fallbackMessage: body.fallbackMessage ?? existingBot?.fallbackMessage,
-      objectives: body.objectives ?? existingBot?.objectives,
-      rules: body.rules ?? existingBot?.rules,
-      restrictions: body.restrictions ?? existingBot?.restrictions,
+      ...(body.name !== undefined && { name: body.name }),
+      ...(body.businessName !== undefined && { businessName: body.businessName }),
+      ...(body.personality !== undefined && { personality: body.personality }),
+      ...(body.language !== undefined && { language: body.language }),
+      ...(body.primaryProvider !== undefined && { primaryProvider: body.primaryProvider }),
+      ...(body.primaryModel !== undefined && { primaryModel: body.primaryModel }),
+      ...(body.fallbackProvider !== undefined && { fallbackProvider: body.fallbackProvider }),
+      ...(body.fallbackModel !== undefined && { fallbackModel: body.fallbackModel }),
+      ...(body.temperature !== undefined && { temperature: String(body.temperature) }),
+      ...(body.welcomeMessage !== undefined && { welcomeMessage: body.welcomeMessage }),
+      ...(body.fallbackMessage !== undefined && { fallbackMessage: body.fallbackMessage }),
+      ...(body.objectives !== undefined && { objectives: body.objectives }),
+      ...(body.rules !== undefined && { rules: body.rules }),
+      ...(body.restrictions !== undefined && { restrictions: body.restrictions }),
+      ...(body.whatsappNumber !== undefined && { whatsappNumber: body.whatsappNumber }),
+      ...(body.whatsappStatus !== undefined && { whatsappStatus: body.whatsappStatus }),
+      ...(body.phoneNumberId !== undefined && { phoneNumberId: body.phoneNumberId }),
       systemPromptOverride: updatedSystemPrompt,
       updatedAt: new Date(),
     };
@@ -72,8 +80,8 @@ export async function PUT(request, { params }) {
 
     return NextResponse.json({
       success: true,
-      message: 'Bot configuration updated successfully in DB',
-      data: { id: botId, ...updateData },
+      message: 'Bot configuration updated successfully',
+      data: { id: botId, ...existingBot, ...updateData },
     });
   } catch (error) {
     logger.error('Error updating bot in DB', error);
