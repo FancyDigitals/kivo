@@ -1,6 +1,6 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { BRAND } from '@/config/brand';
-import { Bot, ArrowRight } from 'lucide-react';
 
 export default function MarketingLayout({ children }) {
   return (
@@ -10,14 +10,16 @@ export default function MarketingLayout({ children }) {
       <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-slate-100">
         <div className="max-w-6xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
           
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 group">
-            <div className="w-7 h-7 rounded-lg bg-slate-900 flex items-center justify-center text-emerald-400 transition-colors">
-              <Bot className="w-4 h-4" strokeWidth={2.25} />
-            </div>
-            <span className="font-semibold text-[15px] tracking-tight text-slate-900">
-              {BRAND.name}
-            </span>
+          {/* Logo (Standalone & Highly Visible) */}
+          <Link href="/" className="flex items-center group">
+            <Image
+              src="/logos/logo.png"
+              alt={BRAND.name}
+              width={160}
+              height={40}
+              className="h-8 sm:h-9 w-auto object-contain transition-transform duration-150 group-hover:opacity-90"
+              priority
+            />
           </Link>
 
           {/* Center Nav */}
@@ -38,7 +40,7 @@ export default function MarketingLayout({ children }) {
             </Link>
             <Link
               href="/signup"
-              className="text-[13.5px] font-medium bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg transition-all"
+              className="text-[13.5px] font-medium bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg transition-all shadow-sm hover:shadow"
             >
               Get started
             </Link>
@@ -57,11 +59,14 @@ export default function MarketingLayout({ children }) {
             
             {/* Brand column */}
             <div className="col-span-2">
-              <Link href="/" className="flex items-center gap-2 mb-4">
-                <div className="w-7 h-7 rounded-lg bg-slate-900 flex items-center justify-center text-emerald-400">
-                  <Bot className="w-4 h-4" strokeWidth={2.25} />
-                </div>
-                <span className="font-semibold text-[15px] tracking-tight">{BRAND.name}</span>
+              <Link href="/" className="inline-block mb-4 group">
+                <Image
+                  src="/logo.png"
+                  alt={BRAND.name}
+                  width={150}
+                  height={38}
+                  className="h-8 w-auto object-contain transition-transform duration-150 group-hover:opacity-90"
+                />
               </Link>
               <p className="text-sm text-slate-500 max-w-xs leading-relaxed">
                 The infrastructure for businesses that want to talk to every customer, instantly.

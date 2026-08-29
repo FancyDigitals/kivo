@@ -146,35 +146,69 @@ export async function POST(request) {
       return NextResponse.json({ status: 'human_handoff_active' }, { status: 200 });
     }
 
-    // F. Execute AI Gateway Response
-    const knowledgeItems = Array.from(knowledgeStore.values());
-    const productItems = Array.from(productsStore.values());
+        // F. AI response (never crash the webhook without trying a fallback text)
+    let replyText =
+      "Thanks for your message. I'm having a brief technical issue — please try again in a moment.";
 
-    const knowledgeText = buildKnowledgeContext(knowledgeItems);
-    const productText = buildProductContext(productItems);
+    try {
+      const knowledgeItems = Array.from(knowledgeStore.values());
+      const productItems = Array.from(productsStore.values());
 
-    const systemPrompt = buildSystemPrompt({
-      botName: activeBot.name,
-      businessName: activeBot.businessName,
-      industry: activeBot.industry,
-      personality: activeBot.personality,
-      language: activeBot.language,
-      objectives: activeBot.objectives || [],
-      rules: activeBot.rules || [],
-      restrictions: activeBot.restrictions || [],
-      knowledgeContext: knowledgeText,
-      productContext: productText,
-    });
+      const systemPrompt = buildSystemPrompt({
+        botName: activeBot.name,
+        businessName: activeBot.businessName,
+        industry: activeBot.industry,
+        personality: activeBot.personality,
+        language: activeBot.language,
+        objectives: activeBot.objectives || [],
+        rules: activeBot.rules || [],
+        restrictions: activeBot.restrictions || [],
+        knowledgeContext: buildKnowledgeContext(knowledgeItems),
+        productContext: buildProductContext(productItems),
+      });
 
-    const aiResult = await generateAiResponse({
-      messages: [{ role: 'user', content: userMessageText }],
-      systemPrompt,
-      primaryProvider: activeBot.primaryProvider || 'groq',
-      primaryModel: activeBot.primaryModel || 'llama-3.1-8b-instant',
-      temperature: Number(activeBot.temperature || 0.3),
+      const aiResult = await generateAiResponse({
+        messages: [{ role: 'user', content: userMessageText || 'Hello' }],
+        systemPrompt,
+        primaryProvider: activeBot.primaryProvider || 'groq',
+        primaryModel: activeBot.primaryModel || 'llama-3.1-8b-instant',
+        temperature: Number(activeBot.temperature || 0.3),
+        workspaceId,
+        botId: activeBot.id,
+      });
+
+      replyText = aiResult?.text || replyText;
+    } catch (aiErr) {
+      logger.error('AI failed on WhatsApp webhook', aiErr);
+    }
+
+    await db.insert(messages).values({
+      id: generateId('msg'),
       workspaceId,
-      botId: activeBot.id,
+      conversationId: conv.id,
+      senderType: 'bot',
+      senderId: activeBot.id,
+      content: replyText,
     });
+
+    await db
+      .update(conversations)
+      .set({ lastMessageSnippet: replyText, updatedAt: new Date() })
+      .where(eq(conversations.id, conv.id));
+
+    const sendResult = await sendWhatsAppTextMessage({
+      to: fromPhone,
+      text: replyText,
+      // Prefer env phone id (Meta test number) unless bot has real linked id
+      phoneNumberId:
+        process.env.WHATSAPP_PHONE_NUMBER_ID ||
+        activeBot.phoneNumberId ||
+        incomingPhoneId,
+    });
+
+    logger.info('WhatsApp send result', sendResult);
+
+    return NextResponse.json({ success: true, status: 'processed', sendResult }, { status: 200 });
 
     // G. Save AI Message & Reply via Meta Cloud API
     await db.insert(messages).values({
