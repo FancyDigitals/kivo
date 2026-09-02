@@ -6,18 +6,32 @@
 export const BRAND = {
   name: 'Kivo',
   tagline: 'Create your intelligent WhatsApp employee.',
-  description: 'Build, train, deploy, and manage production-ready WhatsApp AI bots for your business in minutes without writing code.',
+  description:
+    'Build, train, deploy, and manage production-ready WhatsApp AI bots for your business in minutes without writing code.',
   url: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
   supportEmail: 'support@kivo.ai',
-  
-  // Theme & Appearance
+  logo: '/logo.png',
+
+  // Theme extracted directly from the Kivo logo
   theme: {
-    primaryColor: '#0F172A',      // Slate 900
-    accentColor: '#10B981',       // Emerald 500 (WhatsApp brand harmony)
-    accentColorHover: '#059669',  // Emerald 600
-    backgroundColor: '#FAFAFA',   // Off-white / Neutral 50
+    // Core brand blues
+    primaryColor: '#0B1B4B',        // Deep navy (KIVO wordmark)
+    primaryColorHover: '#071233',
+    accentColor: '#0080FF',         // Electric blue (robot body)
+    accentColorHover: '#0066DD',
+    accentBright: '#00B4FF',        // Bright sky blue (K mark gradient)
+    cyan: '#00E5FF',                // Eye glow / highlight
+    cyanSoft: '#67E8F9',
+
+    // Surfaces
+    backgroundColor: '#F8FAFC',     // Cool slate-50
     surfaceColor: '#FFFFFF',
-    borderColor: '#E2E8F0',       // Slate 200
+    borderColor: '#E2E8F0',
+
+    // Text
+    textPrimary: '#0F172A',
+    textSecondary: '#475569',
+    textMuted: '#94A3B8',
   },
 
   // Supported Bot Business Categories

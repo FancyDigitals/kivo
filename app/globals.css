@@ -3,8 +3,32 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* Kivo brand tokens — from logo */
+    --kivo-navy: #0B1B4B;
+    --kivo-navy-hover: #071233;
+    --kivo-blue: #0080FF;
+    --kivo-blue-hover: #0066DD;
+    --kivo-blue-bright: #00B4FF;
+    --kivo-cyan: #00E5FF;
+    --kivo-cyan-soft: #67E8F9;
+
+    --kivo-bg: #F8FAFC;
+    --kivo-surface: #FFFFFF;
+    --kivo-border: #E2E8F0;
+    --kivo-text: #0F172A;
+    --kivo-text-secondary: #475569;
+    --kivo-text-muted: #94A3B8;
+  }
+
   body {
     @apply bg-slate-50 text-slate-900 antialiased;
+  }
+
+  /* Selection uses brand cyan-blue */
+  ::selection {
+    background-color: #0080FF;
+    color: #ffffff;
   }
 }
 
@@ -22,4 +46,43 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+}
+
+/* Brand utility classes */
+@layer utilities {
+  .bg-kivo {
+    background-color: var(--kivo-blue);
+  }
+  .bg-kivo-navy {
+    background-color: var(--kivo-navy);
+  }
+  .bg-kivo-hover:hover {
+    background-color: var(--kivo-blue-hover);
+  }
+  .text-kivo {
+    color: var(--kivo-blue);
+  }
+  .text-kivo-navy {
+    color: var(--kivo-navy);
+  }
+  .text-kivo-cyan {
+    color: var(--kivo-cyan);
+  }
+  .border-kivo {
+    border-color: var(--kivo-blue);
+  }
+  .ring-kivo {
+    --tw-ring-color: var(--kivo-blue);
+  }
+
+  /* Signature Kivo gradient (robot → K mark) */
+  .bg-kivo-gradient {
+    background-image: linear-gradient(135deg, #0080FF 0%, #00B4FF 50%, #00E5FF 100%);
+  }
+  .text-kivo-gradient {
+    background-image: linear-gradient(135deg, #0080FF 0%, #00B4FF 55%, #00E5FF 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
 }
