@@ -1,38 +1,61 @@
 import { NextResponse } from 'next/server';
+import { verifyMiddlewareToken } from '@/lib/auth/middleware-session';
 
-export function middleware(request) {
+export async function middleware(request) {
   const { pathname } = request.nextUrl;
 
-  // Protected workspace routes
-  const protectedRoutes = ['/dashboard', '/bots', '/inbox', '/customers', '/leads', '/orders', '/products', '/knowledge', '/automations', '/analytics', '/team', '/settings'];
+  const protectedRoutes = [
+    '/dashboard',
+    '/settings',
+    '/billing',
+    '/workspace',
+    '/account',
+    '/admin',
+  ];
 
-  const isProtectedRoute = protectedRoutes.some((route) => pathname.startsWith(route));
+  const isProtectedRoute = protectedRoutes.some(
+    (route) =>
+      pathname === route ||
+      pathname.startsWith(`${route}/`)
+  );
 
-  // Skip asset files and API routes
-  if (
-    pathname.startsWith('/_next') ||
-    pathname.startsWith('/api') ||
-    pathname.startsWith('/public') ||
-    pathname.includes('.')
-  ) {
+  if (!isProtectedRoute) {
     return NextResponse.next();
   }
 
-  // Session token check
-  const sessionToken = request.cookies.get('kivo_session')?.value;
+  const token = request.cookies.get('kivo_session')?.value;
 
-  if (isProtectedRoute && !sessionToken) {
-    // In development mode pass-through if no token yet to facilitate local testing
-    if (process.env.NODE_ENV === 'development') {
-      return NextResponse.next();
-    }
-    const loginUrl = new URL('/login', request.url);
-    return NextResponse.redirect(loginUrl);
+  if (!token) {
+    return redirectToLogin(request);
+  }
+
+  const session = await verifyMiddlewareToken(token);
+
+  if (!session?.userId || !session?.workspaceId) {
+    return redirectToLogin(request);
   }
 
   return NextResponse.next();
 }
 
+function redirectToLogin(request) {
+  const loginUrl = new URL('/login', request.url);
+
+  loginUrl.searchParams.set(
+    'redirect',
+    request.nextUrl.pathname
+  );
+
+  return NextResponse.redirect(loginUrl);
+}
+
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: [
+    '/dashboard/:path*',
+    '/settings/:path*',
+    '/billing/:path*',
+    '/workspace/:path*',
+    '/account/:path*',
+    '/admin/:path*',
+  ],
 };

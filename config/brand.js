@@ -10,7 +10,7 @@ export const BRAND = {
     'Build, train, deploy, and manage production-ready WhatsApp AI bots for your business in minutes without writing code.',
   url: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
   supportEmail: 'support@kivo.ai',
-  logo: '/logo.png',
+  logo: '/logos/logo.png',
 
   // Theme extracted directly from the Kivo logo
   theme: {
