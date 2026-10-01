@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
@@ -10,7 +10,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 
-function VerifyEmailContent() {
+export default function VerifyEmailClient() {
   const searchParams = useSearchParams();
 
   const email = searchParams.get('email') || '';
@@ -58,7 +58,9 @@ function VerifyEmailContent() {
         console.error(error);
 
         setStatus('error');
-        setMessage('Something went wrong. Please try again.');
+        setMessage(
+          'Something went wrong. Please try again.'
+        );
       }
     };
 
@@ -142,23 +144,5 @@ function VerifyEmailContent() {
 
       </div>
     </main>
-  );
-}
-
-function VerifyEmailFallback() {
-  return (
-    <main className="min-h-screen bg-[#050914] text-white flex items-center justify-center px-5">
-      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#08D9FF]/10">
-        <Loader2 className="h-7 w-7 text-[#08D9FF] animate-spin" />
-      </div>
-    </main>
-  );
-}
-
-export default function VerifyEmailPage() {
-  return (
-    <Suspense fallback={<VerifyEmailFallback />}>
-      <VerifyEmailContent />
-    </Suspense>
   );
 }
