@@ -41,7 +41,8 @@ export async function POST(request) {
       );
     }
 
-    if (user.emailVerifiedAt) {
+    // Already verified
+    if (user.emailVerified) {
       return NextResponse.json({
         success: true,
         alreadyVerified: true,
@@ -49,6 +50,7 @@ export async function POST(request) {
       });
     }
 
+    // Missing verification data
     if (
       !user.emailVerificationTokenHash ||
       !user.emailVerificationExpiresAt
@@ -62,6 +64,7 @@ export async function POST(request) {
       );
     }
 
+    // Expired token
     if (
       new Date(user.emailVerificationExpiresAt).getTime() <
       Date.now()
@@ -77,6 +80,7 @@ export async function POST(request) {
       );
     }
 
+    // Verify token
     const tokenHash = hashVerificationToken(token);
 
     if (tokenHash !== user.emailVerificationTokenHash) {
@@ -89,10 +93,11 @@ export async function POST(request) {
       );
     }
 
+    // Mark email as verified
     await db
       .update(users)
       .set({
-        emailVerifiedAt: new Date(),
+        emailVerified: true,
         emailVerificationTokenHash: null,
         emailVerificationExpiresAt: null,
         updatedAt: new Date(),
@@ -105,6 +110,7 @@ export async function POST(request) {
 
     return NextResponse.json({
       success: true,
+      alreadyVerified: false,
       message: 'Email verified successfully.',
     });
   } catch (error) {

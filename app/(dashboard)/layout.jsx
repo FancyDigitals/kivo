@@ -37,7 +37,7 @@ const NAV_ITEMS = [
   { label: 'Settings', href: '/settings', icon: Settings },
 ];
 
-const LOGO_SRC = '/logos/logo.png'; // or '/logo.png' if that's your path
+const LOGO_SRC = '/logos/logo1.png'; // or '/logo.png' if that's your path
 
 function LogoMark({ className = '', imgClassName = '' }) {
   return (
@@ -57,7 +57,7 @@ function LogoMark({ className = '', imgClassName = '' }) {
       />
       <Image
         src={LOGO_SRC}
-        alt={BRAND.name || 'Kivo'}
+        alt={BRAND.name || 'Kivoo'}
         width={120}
         height={36}
         className={`relative z-10 w-auto object-contain object-center ${imgClassName}`}

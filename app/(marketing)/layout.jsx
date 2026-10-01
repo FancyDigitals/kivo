@@ -13,7 +13,7 @@ export default function MarketingLayout({ children }) {
           {/* Logo only — name is inside the image */}
           <Link href="/" className="flex items-center group shrink-0">
             <Image
-              src="/logos/logo.png"
+              src="/logos/logo1.png"
               alt={BRAND.name}
               width={140}
               height={40}

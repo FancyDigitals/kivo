@@ -215,7 +215,6 @@ export async function POST(request) {
         fullName: name,
         role: 'user',
         isActive: true,
-        emailVerifiedAt: null,
         emailVerificationTokenHash:
           verificationTokenHash,
         emailVerificationExpiresAt:
