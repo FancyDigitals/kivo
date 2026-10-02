@@ -16,13 +16,16 @@ export default function LoginPage() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
+
     setIsLoading(true);
     setErrorMsg('');
 
     try {
       const res = await fetch('/api/auth', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
           action: 'login',
           email,
@@ -35,11 +38,12 @@ export default function LoginPage() {
       if (result.success) {
         window.dispatchEvent(new Event('workspace-updated'));
         router.push('/dashboard');
-      } else {
-        setErrorMsg(result.error || 'Failed to sign in.');
+        return;
       }
+
+      setErrorMsg(result.error || 'Failed to sign in.');
     } catch (err) {
-      console.error(err);
+      console.error('[LOGIN ERROR]', err);
       setErrorMsg('Network error. Please try again.');
     } finally {
       setIsLoading(false);
@@ -88,7 +92,7 @@ export default function LoginPage() {
           {/* Login */}
           <div>
 
-            {/* Mobile */}
+            {/* Mobile heading */}
             <div className="lg:hidden mb-9">
 
               <h1 className="text-3xl font-semibold tracking-[-0.04em]">
@@ -98,6 +102,7 @@ export default function LoginPage() {
               <p className="mt-2 text-sm text-slate-400">
                 Sign in to your {BRAND.name} workspace.
               </p>
+
             </div>
 
             {/* Form card */}
@@ -114,7 +119,7 @@ export default function LoginPage() {
               </div>
 
               {errorMsg && (
-                <div className="mb-5 rounded-xl border border-red-400/20 bg-red-400/[0.06] px-4 py-3 text-sm text-red-300 flex items-start gap-2.5">
+                <div className="mb-5 flex items-start gap-2.5 rounded-xl border border-red-400/20 bg-red-400/[0.06] px-4 py-3 text-sm text-red-300">
                   <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                   <span>{errorMsg}</span>
                 </div>
@@ -122,6 +127,7 @@ export default function LoginPage() {
 
               <form onSubmit={handleLogin} className="space-y-4">
 
+                {/* Email */}
                 <div>
                   <label className="block text-[12px] font-medium text-slate-400 mb-2">
                     Email address
@@ -132,30 +138,43 @@ export default function LoginPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@company.com"
+                    autoComplete="email"
                     className="w-full h-12 px-4 rounded-xl border border-white/[0.09] bg-[#050914] text-sm text-white placeholder:text-slate-600 outline-none transition focus:border-[#08D9FF]/60 focus:ring-4 focus:ring-[#08D9FF]/[0.07]"
                     required
                   />
                 </div>
 
+                {/* Password */}
                 <div>
-                  <label className="block text-[12px] font-medium text-slate-400 mb-2">
-                    Password
-                  </label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-[12px] font-medium text-slate-400">
+                      Password
+                    </label>
+
+                    <Link
+                      href="/forgot-password"
+                      className="text-xs text-[#08D9FF] hover:text-[#22E0FF] transition-colors"
+                    >
+                      Forgot password?
+                    </Link>
+                  </div>
 
                   <input
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Enter your password"
+                    autoComplete="current-password"
                     className="w-full h-12 px-4 rounded-xl border border-white/[0.09] bg-[#050914] text-sm text-white placeholder:text-slate-600 outline-none transition focus:border-[#08D9FF]/60 focus:ring-4 focus:ring-[#08D9FF]/[0.07]"
                     required
                   />
                 </div>
 
+                {/* Submit */}
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="group w-full h-12 mt-2 rounded-xl bg-[#08D9FF] hover:bg-[#22E0FF] disabled:opacity-50 text-[#031018] font-semibold text-sm transition-all flex items-center justify-center gap-2"
+                  className="group w-full h-12 mt-2 rounded-xl bg-[#08D9FF] hover:bg-[#22E0FF] disabled:opacity-50 disabled:cursor-not-allowed text-[#031018] font-semibold text-sm transition-all flex items-center justify-center gap-2"
                 >
                   {isLoading ? (
                     <>

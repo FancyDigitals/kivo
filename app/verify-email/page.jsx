@@ -8,6 +8,7 @@ import {
   AlertCircle,
   Loader2,
   ArrowRight,
+  Mail,
 } from 'lucide-react';
 
 function VerifyEmailContent() {
@@ -16,11 +17,24 @@ function VerifyEmailContent() {
   const email = searchParams.get('email') || '';
   const token = searchParams.get('token') || '';
 
-  const [status, setStatus] = useState('loading');
+  const [status, setStatus] = useState(
+    token ? 'loading' : 'sent'
+  );
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    if (!email || !token) {
+    // ----------------------------------------------------
+    // SIGNUP FLOW
+    // No token means the user has just signed up.
+    // Do NOT show verification failed.
+    // ----------------------------------------------------
+
+    if (!token) {
+      setStatus('sent');
+      return;
+    }
+
+    if (!email) {
       setStatus('error');
       setMessage('This verification link is invalid.');
       return;
@@ -43,22 +57,27 @@ function VerifyEmailContent() {
 
         if (result.success) {
           setStatus('success');
+
           setMessage(
             result.alreadyVerified
               ? 'Your email is already verified.'
               : 'Your email has been verified successfully.'
           );
-        } else {
-          setStatus('error');
-          setMessage(
-            result.error || 'Unable to verify your email.'
-          );
+
+          return;
         }
+
+        setStatus('error');
+        setMessage(
+          result.error || 'Unable to verify your email.'
+        );
       } catch (error) {
         console.error(error);
 
         setStatus('error');
-        setMessage('Something went wrong. Please try again.');
+        setMessage(
+          'Something went wrong while verifying your email. Please try again.'
+        );
       }
     };
 
@@ -70,6 +89,57 @@ function VerifyEmailContent() {
       <div className="w-full max-w-[460px]">
 
         <div className="rounded-[24px] border border-white/[0.08] bg-[#0A111E] p-8 sm:p-10 text-center">
+
+          {/* ------------------------------------------------ */}
+          {/* EMAIL SENT */}
+          {/* ------------------------------------------------ */}
+
+          {status === 'sent' && (
+            <>
+              <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-full bg-[#08D9FF]/10">
+                <Mail className="h-7 w-7 text-[#08D9FF]" />
+              </div>
+
+              <h1 className="text-2xl font-semibold tracking-[-0.03em]">
+                Check your email
+              </h1>
+
+              <p className="mt-3 text-sm leading-6 text-slate-400">
+                We sent a verification link to
+              </p>
+
+              {email && (
+                <p className="mt-2 text-sm font-medium text-white break-all">
+                  {email}
+                </p>
+              )}
+
+              <p className="mt-4 text-sm leading-6 text-slate-400">
+                Open the email and click the verification link
+                to activate your Kivo account.
+              </p>
+
+              <div className="mt-6 rounded-xl border border-white/[0.07] bg-white/[0.025] px-4 py-3 text-left">
+                <p className="text-xs leading-5 text-slate-500">
+                  Didn't receive it? Check your spam or junk
+                  folder. The verification email may take a few
+                  moments to arrive.
+                </p>
+              </div>
+
+              <Link
+                href="/login"
+                className="group mt-7 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#08D9FF] text-sm font-semibold text-[#031018] transition hover:bg-[#22E0FF]"
+              >
+                Go to sign in
+                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+              </Link>
+            </>
+          )}
+
+          {/* ------------------------------------------------ */}
+          {/* VERIFYING */}
+          {/* ------------------------------------------------ */}
 
           {status === 'loading' && (
             <>
@@ -86,6 +156,10 @@ function VerifyEmailContent() {
               </p>
             </>
           )}
+
+          {/* ------------------------------------------------ */}
+          {/* SUCCESS */}
+          {/* ------------------------------------------------ */}
 
           {status === 'success' && (
             <>
@@ -111,6 +185,10 @@ function VerifyEmailContent() {
             </>
           )}
 
+          {/* ------------------------------------------------ */}
+          {/* ERROR */}
+          {/* ------------------------------------------------ */}
+
           {status === 'error' && (
             <>
               <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-full bg-red-400/10">
@@ -129,7 +207,7 @@ function VerifyEmailContent() {
                 href={`/verify-email?email=${encodeURIComponent(email)}`}
                 className="mt-7 inline-flex h-12 w-full items-center justify-center rounded-xl border border-white/[0.09] bg-white/[0.03] text-sm font-medium transition hover:bg-white/[0.06]"
               >
-                Request a new verification email
+                Back to email verification
               </Link>
             </>
           )}

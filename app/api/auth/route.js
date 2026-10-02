@@ -7,20 +7,32 @@ import {
   workspaceMembers,
 } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
+
 import {
   hashPassword,
   comparePassword,
   signJwtToken,
 } from '@/lib/auth/session';
+
 import { generateId } from '@/lib/utils/helpers';
 import { buildSystemPrompt } from '@/lib/ai/prompts/builder';
 import { logger } from '@/lib/utils/logger';
+
 import {
   generateVerificationToken,
   hashVerificationToken,
   getVerificationExpiry,
 } from '@/lib/auth/email-verification';
+
 import { sendVerificationEmail } from '@/lib/auth/send-verification-email';
+
+import {
+  generatePasswordResetToken,
+  hashPasswordResetToken,
+  getPasswordResetExpiry,
+} from '@/lib/auth/password-reset';
+
+import { sendPasswordResetEmail } from '@/lib/auth/send-password-reset-email';
 
 export async function POST(request) {
   try {
@@ -64,12 +76,18 @@ export async function POST(request) {
     if (!resolvedAction) {
       if (currentPassword || body.oldPassword || newPassword) {
         resolvedAction = 'change-password';
+      } else if (body.token && (body.newPassword || body.password)) {
+        resolvedAction = 'reset-password';
+      } else if (body.forgotPassword || body.resetPassword) {
+        resolvedAction = 'forgot-password';
       } else if (fullName || body.name || businessName) {
         resolvedAction = 'signup';
       } else if (cleanEmail && password) {
         resolvedAction = 'login';
       }
     }
+
+    // Normalize action names
 
     if (
       ['signup', 'sign-up', 'sign_up', 'register'].includes(
@@ -99,6 +117,27 @@ export async function POST(request) {
     }
 
     if (
+      [
+        'forgot-password',
+        'forgotpassword',
+        'forgot_password',
+        'password-reset-request',
+      ].includes(resolvedAction)
+    ) {
+      resolvedAction = 'forgot-password';
+    }
+
+    if (
+      [
+        'reset-password',
+        'resetpassword',
+        'reset_password',
+      ].includes(resolvedAction)
+    ) {
+      resolvedAction = 'reset-password';
+    }
+
+    if (
       ['logout', 'log-out', 'log_out', 'signout', 'sign-out'].includes(
         resolvedAction
       )
@@ -111,7 +150,10 @@ export async function POST(request) {
     // ====================================================
 
     if (resolvedAction === 'signup') {
-      const name = String(fullName || body.name || '').trim();
+      const name = String(
+        fullName || body.name || ''
+      ).trim();
+
       const companyName = String(
         businessName || workspaceName || ''
       ).trim();
@@ -137,9 +179,7 @@ export async function POST(request) {
         );
       }
 
-      // ----------------------------------------------------
-      // CHECK EXISTING USER
-      // ----------------------------------------------------
+      // Check existing user
 
       const existingUser = await db
         .select()
@@ -158,42 +198,38 @@ export async function POST(request) {
         return NextResponse.json(
           {
             success: false,
-            error: 'An account with this email already exists.',
+            error:
+              'An account with this email already exists.',
           },
           { status: 400 }
         );
       }
 
-      // ----------------------------------------------------
-      // GENERATE IDs
-      // ----------------------------------------------------
+      // Generate IDs
 
       const userId = generateId('usr');
       const workspaceId = generateId('ws');
       const botId = generateId('bot');
 
-      // ----------------------------------------------------
-      // PASSWORD
-      // ----------------------------------------------------
+      // Hash password
 
-      const hashedPassword = await hashPassword(password);
+      const hashedPassword =
+        await hashPassword(password);
 
-      // ----------------------------------------------------
-      // EMAIL VERIFICATION
-      // ----------------------------------------------------
+      // Email verification
 
       const verificationToken =
         generateVerificationToken();
 
       const verificationTokenHash =
-        hashVerificationToken(verificationToken);
+        hashVerificationToken(
+          verificationToken
+        );
 
       const verificationExpiresAt =
         getVerificationExpiry();
 
-      // ----------------------------------------------------
-      // WORKSPACE SLUG
-      // ----------------------------------------------------
+      // Workspace slug
 
       const baseSlug = companyName
         .toLowerCase()
@@ -204,9 +240,7 @@ export async function POST(request) {
         100 + Math.random() * 900
       )}`;
 
-      // ----------------------------------------------------
-      // CREATE USER
-      // ----------------------------------------------------
+      // Create user
 
       await db.insert(users).values({
         id: userId,
@@ -221,9 +255,7 @@ export async function POST(request) {
           verificationExpiresAt,
       });
 
-      // ----------------------------------------------------
-      // CREATE WORKSPACE
-      // ----------------------------------------------------
+      // Create workspace
 
       await db.insert(workspaces).values({
         id: workspaceId,
@@ -235,9 +267,7 @@ export async function POST(request) {
         monthlyCreditsLimit: 500,
       });
 
-      // ----------------------------------------------------
-      // CREATE WORKSPACE MEMBER
-      // ----------------------------------------------------
+      // Create workspace member
 
       await db.insert(workspaceMembers).values({
         id: generateId('member'),
@@ -246,17 +276,16 @@ export async function POST(request) {
         role: 'owner',
       });
 
-      // ----------------------------------------------------
-      // CREATE DEFAULT BOT
-      // ----------------------------------------------------
+      // Create default bot
 
-      const defaultSystemPrompt = buildSystemPrompt({
-        botName: `${companyName} Assistant`,
-        businessName: companyName,
-        industry: 'business',
-        personality: 'professional',
-        language: 'en',
-      });
+      const defaultSystemPrompt =
+        buildSystemPrompt({
+          botName: `${companyName} Assistant`,
+          businessName: companyName,
+          industry: 'business',
+          personality: 'professional',
+          language: 'en',
+        });
 
       await db.insert(bots).values({
         id: botId,
@@ -271,12 +300,11 @@ export async function POST(request) {
         primaryProvider: 'groq',
         primaryModel: 'llama-3.1-8b-instant',
         welcomeMessage: `Welcome to *${companyName}*! How can I assist you today?`,
-        systemPromptOverride: defaultSystemPrompt,
+        systemPromptOverride:
+          defaultSystemPrompt,
       });
 
-      // ----------------------------------------------------
-      // SEND VERIFICATION EMAIL
-      // ----------------------------------------------------
+      // Send verification email
 
       try {
         await sendVerificationEmail({
@@ -304,17 +332,15 @@ export async function POST(request) {
         `New signup created: ${companyName} (${workspaceId})`
       );
 
-      // ----------------------------------------------------
       // IMPORTANT:
-      // NO SESSION IS CREATED HERE.
-      // EMAIL VERIFICATION IS REQUIRED.
-      // ----------------------------------------------------
+      // Account exists but no session is created.
+      // User must verify their email first.
 
       return NextResponse.json({
         success: true,
         requiresVerification: true,
         message:
-          'Account created. Please verify your email before signing in.',
+          'Verification link sent. Please check your email to verify your account.',
         user: {
           id: userId,
           email: cleanEmail,
@@ -367,10 +393,11 @@ export async function POST(request) {
         );
       }
 
-      const isPasswordValid = await comparePassword(
-        password,
-        user.passwordHash
-      );
+      const isPasswordValid =
+        await comparePassword(
+          password,
+          user.passwordHash
+        );
 
       if (!isPasswordValid) {
         return NextResponse.json(
@@ -382,9 +409,7 @@ export async function POST(request) {
         );
       }
 
-      // ----------------------------------------------------
-      // EMAIL VERIFICATION REQUIRED
-      // ----------------------------------------------------
+      // Email verification required
 
       if (!user.emailVerified) {
         return NextResponse.json(
@@ -398,23 +423,20 @@ export async function POST(request) {
         );
       }
 
-      // ----------------------------------------------------
-      // ACCOUNT STATUS
-      // ----------------------------------------------------
+      // Account status
 
       if (!user.isActive) {
         return NextResponse.json(
           {
             success: false,
-            error: 'Your account has been disabled.',
+            error:
+              'Your account has been disabled.',
           },
           { status: 403 }
         );
       }
 
-      // ----------------------------------------------------
-      // GET WORKSPACE
-      // ----------------------------------------------------
+      // Get workspace
 
       const userWorkspace = await db
         .select()
@@ -440,12 +462,13 @@ export async function POST(request) {
         );
       }
 
-      const workspaceId = userWorkspace.id;
-      const companyName = userWorkspace.name;
+      const workspaceId =
+        userWorkspace.id;
 
-      // ----------------------------------------------------
-      // CREATE SESSION
-      // ----------------------------------------------------
+      const companyName =
+        userWorkspace.name;
+
+      // Create session
 
       const token = signJwtToken(
         {
@@ -457,9 +480,7 @@ export async function POST(request) {
         user.passwordHash
       );
 
-      // ----------------------------------------------------
-      // UPDATE LAST LOGIN
-      // ----------------------------------------------------
+      // Update last login
 
       await db
         .update(users)
@@ -469,45 +490,283 @@ export async function POST(request) {
         })
         .where(eq(users.id, user.id));
 
-      const response = NextResponse.json({
-        success: true,
-        message: 'Signed in successfully!',
-        user: {
-          id: user.id,
-          email: user.email,
-          fullName: user.fullName,
-          workspaceId,
-          workspaceName: companyName,
-        },
-        workspace: {
-          id: workspaceId,
-          name: companyName,
-        },
-      });
+      const response =
+        NextResponse.json({
+          success: true,
+          message:
+            'Signed in successfully!',
+          user: {
+            id: user.id,
+            email: user.email,
+            fullName: user.fullName,
+            workspaceId,
+            workspaceName:
+              companyName,
+          },
+          workspace: {
+            id: workspaceId,
+            name: companyName,
+          },
+        });
 
-      response.cookies.set('kivo_session', token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 7,
-        path: '/',
-      });
+      response.cookies.set(
+        'kivo_session',
+        token,
+        {
+          httpOnly: true,
+          secure:
+            process.env.NODE_ENV ===
+            'production',
+          sameSite: 'lax',
+          maxAge:
+            60 * 60 * 24 * 7,
+          path: '/',
+        }
+      );
 
       return response;
     }
 
     // ====================================================
-    // 3. CHANGE PASSWORD
+    // 3. FORGOT PASSWORD
     // ====================================================
 
-    if (resolvedAction === 'change-password') {
-      const oldPass =
-        currentPassword || body.oldPassword;
+    if (
+      resolvedAction ===
+      'forgot-password'
+    ) {
+      if (!cleanEmail) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              'Email address is required.',
+          },
+          { status: 400 }
+        );
+      }
+
+      const user = await db
+        .select()
+        .from(users)
+        .where(
+          eq(users.email, cleanEmail)
+        )
+        .then((rows) => rows[0])
+        .catch((error) => {
+          logger.error(
+            'DB error finding user for password reset',
+            error
+          );
+          return null;
+        });
+
+      // Always return the same response
+      // whether the account exists or not.
+
+      if (!user) {
+        return NextResponse.json({
+          success: true,
+          message:
+            'If an account exists for this email, a password reset link has been sent.',
+        });
+      }
+
+      const resetToken =
+        generatePasswordResetToken();
+
+      const resetTokenHash =
+        hashPasswordResetToken(
+          resetToken
+        );
+
+      const resetExpiresAt =
+        getPasswordResetExpiry();
+
+      await db
+        .update(users)
+        .set({
+          passwordResetTokenHash:
+            resetTokenHash,
+          passwordResetExpiresAt:
+            resetExpiresAt,
+          updatedAt: new Date(),
+        })
+        .where(
+          eq(users.id, user.id)
+        );
+
+      try {
+        await sendPasswordResetEmail({
+          email: user.email,
+          fullName: user.fullName,
+          token: resetToken,
+        });
+      } catch (error) {
+        logger.error(
+          'Failed to send password reset email',
+          error
+        );
+
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              'We could not send the password reset email. Please try again.',
+          },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        message:
+          'If an account exists for this email, a password reset link has been sent.',
+      });
+    }
+
+    // ====================================================
+    // 4. RESET PASSWORD
+    // ====================================================
+
+    if (
+      resolvedAction ===
+      'reset-password'
+    ) {
+      const resetToken =
+        String(
+          body.token || ''
+        ).trim();
 
       const newPass =
-        newPassword || password;
+        String(
+          body.newPassword ||
+            body.password ||
+            ''
+        );
 
-      if (!cleanEmail || !oldPass || !newPass) {
+      if (!resetToken || !newPass) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              'Reset token and new password are required.',
+          },
+          { status: 400 }
+        );
+      }
+
+      if (newPass.length < 8) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              'Password must be at least 8 characters.',
+          },
+          { status: 400 }
+        );
+      }
+
+      const resetTokenHash =
+        hashPasswordResetToken(
+          resetToken
+        );
+
+      const user = await db
+        .select()
+        .from(users)
+        .where(
+          eq(
+            users.passwordResetTokenHash,
+            resetTokenHash
+          )
+        )
+        .then((rows) => rows[0])
+        .catch((error) => {
+          logger.error(
+            'DB error finding user for password reset',
+            error
+          );
+          return null;
+        });
+
+      if (!user) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              'This password reset link is invalid or has expired.',
+          },
+          { status: 400 }
+        );
+      }
+
+      if (
+        !user.passwordResetExpiresAt ||
+        new Date(
+          user.passwordResetExpiresAt
+        ) < new Date()
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              'This password reset link has expired. Please request a new one.',
+          },
+          { status: 400 }
+        );
+      }
+
+      const newHashedPassword =
+        await hashPassword(newPass);
+
+      await db
+        .update(users)
+        .set({
+          passwordHash:
+            newHashedPassword,
+          passwordResetTokenHash:
+            null,
+          passwordResetExpiresAt:
+            null,
+          updatedAt: new Date(),
+        })
+        .where(
+          eq(users.id, user.id)
+        );
+
+      logger.info(
+        `Password reset completed for user: ${user.email}`
+      );
+
+      return NextResponse.json({
+        success: true,
+        message:
+          'Your password has been reset successfully. You can now sign in.',
+      });
+    }
+
+    // ====================================================
+    // 5. CHANGE PASSWORD
+    // ====================================================
+
+    if (
+      resolvedAction ===
+      'change-password'
+    ) {
+      const oldPass =
+        currentPassword ||
+        body.oldPassword;
+
+      const newPass =
+        newPassword ||
+        password;
+
+      if (
+        !cleanEmail ||
+        !oldPass ||
+        !newPass
+      ) {
         return NextResponse.json(
           {
             success: false,
@@ -532,7 +791,9 @@ export async function POST(request) {
       const user = await db
         .select()
         .from(users)
-        .where(eq(users.email, cleanEmail))
+        .where(
+          eq(users.email, cleanEmail)
+        )
         .then((rows) => rows[0])
         .catch((error) => {
           logger.error(
@@ -546,7 +807,8 @@ export async function POST(request) {
         return NextResponse.json(
           {
             success: false,
-            error: 'User account not found.',
+            error:
+              'User account not found.',
           },
           { status: 404 }
         );
@@ -562,7 +824,8 @@ export async function POST(request) {
         return NextResponse.json(
           {
             success: false,
-            error: 'Incorrect current password.',
+            error:
+              'Incorrect current password.',
           },
           { status: 400 }
         );
@@ -574,38 +837,49 @@ export async function POST(request) {
       await db
         .update(users)
         .set({
-          passwordHash: newHashedPassword,
+          passwordHash:
+            newHashedPassword,
           updatedAt: new Date(),
         })
-        .where(eq(users.id, user.id));
+        .where(
+          eq(users.id, user.id)
+        );
 
-      // Get actual workspace
-      const userWorkspace = await db
-        .select()
-        .from(workspaces)
-        .where(eq(workspaces.ownerId, user.id))
-        .then((rows) => rows[0])
-        .catch(() => null);
+      const userWorkspace =
+        await db
+          .select()
+          .from(workspaces)
+          .where(
+            eq(
+              workspaces.ownerId,
+              user.id
+            )
+          )
+          .then((rows) => rows[0])
+          .catch(() => null);
 
       const workspaceId =
         userWorkspace?.id || null;
 
-      const newToken = workspaceId
-        ? signJwtToken(
-            {
-              userId: user.id,
-              workspaceId,
-              email: user.email,
-              role: user.role,
-            },
-            newHashedPassword
-          )
-        : null;
+      const newToken =
+        workspaceId
+          ? signJwtToken(
+              {
+                userId: user.id,
+                workspaceId,
+                email: user.email,
+                role: user.role,
+              },
+              newHashedPassword
+            )
+          : null;
 
-      const response = NextResponse.json({
-        success: true,
-        message: 'Password successfully updated.',
-      });
+      const response =
+        NextResponse.json({
+          success: true,
+          message:
+            'Password successfully updated.',
+        });
 
       if (newToken) {
         response.cookies.set(
@@ -614,9 +888,11 @@ export async function POST(request) {
           {
             httpOnly: true,
             secure:
-              process.env.NODE_ENV === 'production',
+              process.env.NODE_ENV ===
+              'production',
             sameSite: 'lax',
-            maxAge: 60 * 60 * 24 * 7,
+            maxAge:
+              60 * 60 * 24 * 7,
             path: '/',
           }
         );
@@ -630,16 +906,22 @@ export async function POST(request) {
     }
 
     // ====================================================
-    // 4. LOGOUT
+    // 6. LOGOUT
     // ====================================================
 
-    if (resolvedAction === 'logout') {
-      const response = NextResponse.json({
-        success: true,
-        message: 'Logged out successfully.',
-      });
+    if (
+      resolvedAction === 'logout'
+    ) {
+      const response =
+        NextResponse.json({
+          success: true,
+          message:
+            'Logged out successfully.',
+        });
 
-      response.cookies.delete('kivo_session');
+      response.cookies.delete(
+        'kivo_session'
+      );
 
       return response;
     }
@@ -651,7 +933,8 @@ export async function POST(request) {
     return NextResponse.json(
       {
         success: false,
-        error: `Invalid auth action received: '${action}'.`,
+        error:
+          `Invalid auth action received: '${action}'.`,
       },
       { status: 400 }
     );
