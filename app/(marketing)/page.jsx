@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 
 export const metadata = {
-  title: "Kivo — Create your intelligent WhatsApp employee",
+  title: "Kivoo — Create your intelligent WhatsApp employee",
   description:
     "Build, train, deploy, and manage production-ready WhatsApp AI bots for your business in minutes without writing code.",
   keywords: [
@@ -31,11 +31,11 @@ export const metadata = {
     "SaaS WhatsApp Bot",
   ],
   openGraph: {
-    title: "Kivo — Create your intelligent WhatsApp employee",
+    title: "Kivoo — Create your intelligent WhatsApp employee",
     description:
       "Automate sales, support, bookings, and customer inquiry handling on WhatsApp with intelligent AI.",
     url: "/",
-    siteName: "Kivo",
+    siteName: "Kivoo",
     locale: "en_US",
     type: "website",
   },
@@ -48,12 +48,12 @@ export default function HomePage() {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    name: "Kivo",
+    name: "Kivoo",
     applicationCategory: "BusinessApplication",
     operatingSystem: "Web",
     description:
       "Production-ready SaaS platform to build and deploy intelligent WhatsApp AI bots.",
-    url: "https://kivo.ai",
+    url: "https://kivo.com.ng",
   };
 
   return (

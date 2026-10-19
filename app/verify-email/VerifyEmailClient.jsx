@@ -139,7 +139,7 @@ export default function VerifyEmailClient() {
         </div>
 
         <p className="mt-5 text-center text-[11px] text-slate-600">
-          Secure verification for your Kivo workspace.
+          Secure verification for your Kivoo workspace.
         </p>
 
       </div>

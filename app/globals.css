@@ -86,3 +86,23 @@
     color: transparent;
   }
 }
+.input {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid rgb(203 213 225);
+  background: white;
+  padding: 0.75rem 0.875rem;
+  font-size: 0.875rem;
+  color: rgb(15 23 42);
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.input::placeholder {
+  color: rgb(148 163 184);
+}
+
+.input:focus {
+  border-color: rgb(52 211 153);
+  box-shadow: 0 0 0 3px rgb(209 250 229);
+}

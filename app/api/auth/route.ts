@@ -34,9 +34,9 @@ import {
 
 import { sendPasswordResetEmail } from '@/lib/auth/send-password-reset-email';
 
-export async function POST(request) {
+export async function POST(request: Request) {
   try {
-    let body = {};
+    let body: Record<string, any> = {};
 
     try {
       body = await request.json();
@@ -186,13 +186,6 @@ export async function POST(request) {
         .from(users)
         .where(eq(users.email, cleanEmail))
         .then((rows) => rows[0])
-        .catch((error) => {
-          logger.error(
-            'DB error checking existing user',
-            error
-          );
-          return null;
-        });
 
       if (existingUser) {
         return NextResponse.json(
@@ -240,68 +233,61 @@ export async function POST(request) {
         100 + Math.random() * 900
       )}`;
 
-      // Create user
-
-      await db.insert(users).values({
-        id: userId,
-        email: cleanEmail,
-        passwordHash: hashedPassword,
-        fullName: name,
-        role: 'user',
-        isActive: true,
-        emailVerificationTokenHash:
-          verificationTokenHash,
-        emailVerificationExpiresAt:
-          verificationExpiresAt,
-      });
-
-      // Create workspace
-
-      await db.insert(workspaces).values({
-        id: workspaceId,
-        name: companyName,
-        slug,
-        ownerId: userId,
-        planId: 'free',
-        aiCreditsBalance: 500,
-        monthlyCreditsLimit: 500,
-      });
-
-      // Create workspace member
-
-      await db.insert(workspaceMembers).values({
-        id: generateId('member'),
-        workspaceId,
-        userId,
-        role: 'owner',
-      });
-
-      // Create default bot
-
-      const defaultSystemPrompt =
-        buildSystemPrompt({
-          botName: `${companyName} Assistant`,
-          businessName: companyName,
-          industry: 'business',
-          personality: 'professional',
-          language: 'en',
-        });
-
-      await db.insert(bots).values({
-        id: botId,
-        workspaceId,
-        name: `${companyName} Assistant`,
+      // Build the default bot prompt before opening the transaction.
+      const defaultSystemPrompt = buildSystemPrompt({
+        botName: `${companyName} Assistant`,
         businessName: companyName,
         industry: 'business',
-        description: 'Autonomous AI Assistant',
         personality: 'professional',
         language: 'en',
-        status: 'active',
-        primaryProvider: 'groq',
-        primaryModel: 'llama-3.1-8b-instant',
-        welcomeMessage: `Welcome to *${companyName}*! How can I assist you today?`,
-        systemPromptOverride:
-          defaultSystemPrompt,
+      });
+
+      // Create all signup records atomically. If any insert fails,
+      // PostgreSQL rolls back the user, workspace, membership, and bot.
+      await db.transaction(async (tx) => {
+        await tx.insert(users).values({
+          id: userId,
+          email: cleanEmail,
+          passwordHash: hashedPassword,
+          fullName: name,
+          role: 'user',
+          isActive: true,
+          emailVerificationTokenHash: verificationTokenHash,
+          emailVerificationExpiresAt: verificationExpiresAt,
+        });
+
+        await tx.insert(workspaces).values({
+          id: workspaceId,
+          name: companyName,
+          slug,
+          ownerId: userId,
+          planId: 'free',
+          aiCreditsBalance: 500,
+          monthlyCreditsLimit: 500,
+        });
+
+        await tx.insert(workspaceMembers).values({
+          id: generateId('member'),
+          workspaceId,
+          userId,
+          role: 'owner',
+        });
+
+        await tx.insert(bots).values({
+          id: botId,
+          workspaceId,
+          name: `${companyName} Assistant`,
+          businessName: companyName,
+          industry: 'business',
+          description: 'Autonomous AI Assistant',
+          personality: 'professional',
+          language: 'en',
+          status: 'active',
+          primaryProvider: 'groq',
+          primaryModel: 'llama-3.1-8b-instant',
+          welcomeMessage: `Welcome to *${companyName}*! How can I assist you today?`,
+          systemPromptOverride: defaultSystemPrompt,
+        });
       });
 
       // Send verification email
@@ -314,9 +300,9 @@ export async function POST(request) {
         });
       } catch (error) {
         logger.error(
-          'Failed to send verification email',
-          error
-        );
+  'Failed to send verification email',
+  error instanceof Error ? error.message : String(error)
+);
 
         return NextResponse.json(
           {
@@ -375,13 +361,6 @@ export async function POST(request) {
         .from(users)
         .where(eq(users.email, cleanEmail))
         .then((rows) => rows[0])
-        .catch((error) => {
-          logger.error(
-            'DB error during login',
-            error
-          );
-          return null;
-        });
 
       if (!user) {
         return NextResponse.json(
@@ -443,13 +422,6 @@ export async function POST(request) {
         .from(workspaces)
         .where(eq(workspaces.ownerId, user.id))
         .then((rows) => rows[0])
-        .catch((error) => {
-          logger.error(
-            'DB error fetching user workspace',
-            error
-          );
-          return null;
-        });
 
       if (!userWorkspace) {
         return NextResponse.json(
@@ -553,13 +525,6 @@ export async function POST(request) {
           eq(users.email, cleanEmail)
         )
         .then((rows) => rows[0])
-        .catch((error) => {
-          logger.error(
-            'DB error finding user for password reset',
-            error
-          );
-          return null;
-        });
 
       // Always return the same response
       // whether the account exists or not.
@@ -604,9 +569,9 @@ export async function POST(request) {
         });
       } catch (error) {
         logger.error(
-          'Failed to send password reset email',
-          error
-        );
+  'Failed to send password reset email',
+  error instanceof Error ? error.message : String(error)
+);
 
         return NextResponse.json(
           {
@@ -682,13 +647,6 @@ export async function POST(request) {
           )
         )
         .then((rows) => rows[0])
-        .catch((error) => {
-          logger.error(
-            'DB error finding user for password reset',
-            error
-          );
-          return null;
-        });
 
       if (!user) {
         return NextResponse.json(
@@ -795,13 +753,6 @@ export async function POST(request) {
           eq(users.email, cleanEmail)
         )
         .then((rows) => rows[0])
-        .catch((error) => {
-          logger.error(
-            'DB error finding user for password change',
-            error
-          );
-          return null;
-        });
 
       if (!user) {
         return NextResponse.json(
@@ -855,8 +806,7 @@ export async function POST(request) {
               user.id
             )
           )
-          .then((rows) => rows[0])
-          .catch(() => null);
+          .then((rows) => rows[0]);
 
       const workspaceId =
         userWorkspace?.id || null;
@@ -939,17 +889,12 @@ export async function POST(request) {
       { status: 400 }
     );
   } catch (error) {
-    logger.error(
-      'Authentication Error',
-      error
-    );
+    console.error('[AUTH] Authentication Error:', error);
 
     return NextResponse.json(
       {
         success: false,
-        error:
-          error?.message ||
-          'Authentication failed.',
+        error: 'Authentication failed. Please try again.',
       },
       { status: 500 }
     );

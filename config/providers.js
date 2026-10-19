@@ -1,31 +1,65 @@
 /**
  * KIVO CENTRAL AI MODEL REGISTRY
- * Up-to-date active model identifiers for OpenRouter, Gemini, and Groq.
+ *
+ * Public SaaS product.
+ * These are current provider model identifiers.
  */
 
 export const AI_MODELS = {
   openrouter: {
-    default: 'google/gemini-2.0-flash-001',
+    default: 'openai/gpt-oss-120b',
+
     options: [
-      { id: 'google/gemini-2.0-flash-001', name: 'Gemini 2.0 Flash (Fast & Free Tier)' },
-      { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet (High Accuracy)' },
-      { id: 'meta-llama/llama-3.3-70b-instruct', name: 'Llama 3.3 70B Instruct' },
-      { id: 'deepseek/deepseek-chat', name: 'DeepSeek V3' },
+      {
+        id: 'openai/gpt-oss-120b',
+        name: 'GPT-OSS 120B',
+      },
+      {
+        id: 'openai/gpt-oss-20b',
+        name: 'GPT-OSS 20B',
+      },
+      {
+        id: 'qwen/qwen3.8-27b',
+        name: 'Qwen 3.8 27B',
+      },
     ],
   },
+
   gemini: {
-    default: 'gemini-2.0-flash',
+    default: 'gemini-3.8-flash',
+
     options: [
-      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (Recommended)' },
-      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' },
+      {
+        id: 'gemini-3.8-flash',
+        name: 'Gemini 3.8 Flash',
+      },
+      {
+        id: 'gemini-3.7-flash',
+        name: 'Gemini 3.7 Flash',
+      },
+      {
+        id: 'gemini-3.6-flash',
+        name: 'Gemini 3.6 Flash',
+      },
     ],
   },
+
   groq: {
-    default: 'llama-3.3-70b-versatile',
+    default: 'openai/gpt-oss-120b',
+
     options: [
-      { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B Versatile (Ultra Fast)' },
-      { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant' },
-      { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B' },
+      {
+        id: 'openai/gpt-oss-120b',
+        name: 'GPT-OSS 120B',
+      },
+      {
+        id: 'openai/gpt-oss-20b',
+        name: 'GPT-OSS 20B',
+      },
+      {
+        id: 'qwen/qwen3.8-27b',
+        name: 'Qwen 3.8 27B',
+      },
     ],
   },
 };

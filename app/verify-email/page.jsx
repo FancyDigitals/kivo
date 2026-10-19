@@ -116,7 +116,7 @@ function VerifyEmailContent() {
 
               <p className="mt-4 text-sm leading-6 text-slate-400">
                 Open the email and click the verification link
-                to activate your Kivo account.
+                to activate your Kivoo account.
               </p>
 
               <div className="mt-6 rounded-xl border border-white/[0.07] bg-white/[0.025] px-4 py-3 text-left">
@@ -215,7 +215,7 @@ function VerifyEmailContent() {
         </div>
 
         <p className="mt-5 text-center text-[11px] text-slate-600">
-          Secure verification for your Kivo workspace.
+          Secure verification for your Kivoo workspace.
         </p>
 
       </div>
