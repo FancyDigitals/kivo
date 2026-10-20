@@ -7,6 +7,11 @@ export const metadata = {
   icons: {
     icon: '/logos/logo.png',
   },
+  verification: {
+    other: {
+      "facebook-domain-verification": "ettvlpykynelrqtgwgcow8vwyund82",
+    },
+  },
 };
 
 export default function RootLayout({ children }) {
