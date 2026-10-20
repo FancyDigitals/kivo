@@ -1,502 +1,528 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { use, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft,
   CheckCircle2,
-  Smartphone,
-  Loader2,
+  LoaderCircle,
+  MessageCircle,
+  Phone,
   RefreshCw,
-  LogOut,
-  Bot,
-  Wifi,
   ShieldCheck,
+  Unplug,
+  AlertCircle,
 } from 'lucide-react';
 
-export default function BotWhatsAppSetupPage({ params }) {
-  const unwrappedParams = use(params);
-  const botId = unwrappedParams.botId;
+const META_APP_ID = '1082561691011151';
+const META_CONFIG_ID = '1118229300820018';
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [connectionStatus, setConnectionStatus] =
-    useState('disconnected');
-  const [qrDataUrl, setQrDataUrl] = useState(null);
-  const [assignedNumber, setAssignedNumber] = useState('');
-  const [isDisconnecting, setIsDisconnecting] = useState(false);
+const GRAPH_VERSION = 'v26.0';
+const STATUS_ENDPOINT = '/api/whatsapp/cloud/status';
+const CONNECT_ENDPOINT = '/api/whatsapp/cloud/connect';
 
-  const fetchStatusAndQr = async () => {
+export default function WhatsAppConnectionPage({ params }) {
+  const resolvedParams = use(params);
+  const botId = resolvedParams?.botId;
+
+  const [status, setStatus] = useState('loading');
+  const [phoneNumber, setPhoneNumber] = useState(null);
+  const [verifiedName, setVerifiedName] = useState(null);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [connecting, setConnecting] = useState(false);
+  const [sdkReady, setSdkReady] = useState(false);
+
+  const signupRef = useRef({
+    code: null,
+    wabaId: null,
+    phoneNumberId: null,
+    completed: false,
+  });
+
+  const busyRef = useRef(false);
+
+  const loadStatus = useCallback(async () => {
+    if (!botId) return;
+
     try {
-      const res = await fetch(
-        `/api/whatsapp/status?botId=${encodeURIComponent(botId)}`,
+      const response = await fetch(
+        `${STATUS_ENDPOINT}?botId=${encodeURIComponent(botId)}`,
         {
+          method: 'GET',
           cache: 'no-store',
+          credentials: 'same-origin',
         }
       );
 
-      const contentType =
-        res.headers.get('content-type') || '';
+      const data = await response.json();
 
-      if (!res.ok || !contentType.includes('application/json')) {
-        console.warn(
-          'WhatsApp status response was not JSON:',
-          res.status
-        );
-        return;
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Unable to load WhatsApp status.');
       }
 
-      const data = await res.json();
-
-      if (!data.success) {
-        return;
-      }
-
-      /*
-       * Normalize the status returned by the WhatsApp backend.
-       *
-       * Your backend may return:
-       * connected
-       * open
-       * ready
-       * authenticated
-       * online
-       * active
-       * logged_in
-       * connecting
-       * scanning
-       * qr
-       */
-      const rawStatus = String(
-        data.status ||
-          data.connectionStatus ||
-          data.whatsappStatus ||
-          ''
-      )
-        .toLowerCase()
-        .trim();
-
-      const connectedStates = [
-        'connected',
-        'open',
-        'ready',
-        'authenticated',
-        'online',
-        'active',
-        'logged_in',
-        'logged-in',
-      ];
-
-      const scanningStates = [
-        'connecting',
-        'scanning',
-        'qr',
-        'qr_pending',
-        'qr-pending',
-      ];
-
-      let normalizedStatus = 'disconnected';
-
-      if (connectedStates.includes(rawStatus)) {
-        normalizedStatus = 'connected';
-      } else if (scanningStates.includes(rawStatus)) {
-        normalizedStatus = 'scanning';
-      }
-
-      setConnectionStatus(normalizedStatus);
-
-      const number =
-        data.whatsappNumber ||
-        data.phoneNumber ||
-        data.assignedNumber ||
-        '';
-
-      if (number) {
-        setAssignedNumber(number);
-      }
-
-      /*
-       * Never allow an old QR code to remain visible after
-       * the WhatsApp connection has become active.
-       */
-      if (normalizedStatus === 'connected') {
-        setQrDataUrl(null);
-      } else if (data.qrDataUrl) {
-        setQrDataUrl(data.qrDataUrl);
-      }
-    } catch (error) {
-      console.error(
-        'Error fetching WhatsApp status:',
-        error?.message || error
-      );
-    } finally {
-      setIsLoading(false);
+      setStatus(data.status || 'disconnected');
+      setPhoneNumber(data.phoneNumber || null);
+      setVerifiedName(data.verifiedName || null);
+    } catch (err) {
+      setStatus('error');
+      setError(err.message || 'Unable to load WhatsApp status.');
     }
-  };
-
-  useEffect(() => {
-    let mounted = true;
-
-    const loadStatus = async () => {
-      if (mounted) {
-        await fetchStatusAndQr();
-      }
-    };
-
-    loadStatus();
-
-    const interval = setInterval(() => {
-      if (mounted) {
-        fetchStatusAndQr();
-      }
-    }, 3000);
-
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
   }, [botId]);
 
-  const handleDisconnect = async () => {
-    const confirmed = window.confirm(
-      'Are you sure you want to disconnect this WhatsApp line?'
-    );
+  useEffect(() => {
+    loadStatus();
+  }, [loadStatus]);
 
-    if (!confirmed) {
+  // Load the official Facebook SDK.
+  useEffect(() => {
+    if (window.FB) {
+      setSdkReady(true);
       return;
     }
 
-    setIsDisconnecting(true);
+    window.fbAsyncInit = function () {
+      window.FB.init({
+        appId: META_APP_ID,
+        cookie: true,
+        xfbml: false,
+        version: GRAPH_VERSION,
+      });
+
+      setSdkReady(true);
+    };
+
+    if (!document.getElementById('facebook-jssdk')) {
+      const script = document.createElement('script');
+      script.id = 'facebook-jssdk';
+      script.src = 'https://connect.facebook.net/en_US/sdk.js';
+      script.async = true;
+      script.defer = true;
+      script.crossOrigin = 'anonymous';
+
+      script.onerror = () => {
+        setError('The Meta SDK could not load. Check your internet connection and Meta app configuration.');
+      };
+
+      document.body.appendChild(script);
+    }
+  }, []);
+
+  const finishSignup = useCallback(async () => {
+    const signup = signupRef.current;
+
+    if (
+      busyRef.current ||
+      !signup.code ||
+      !signup.wabaId ||
+      !signup.phoneNumberId ||
+      !signup.completed
+    ) {
+      return;
+    }
+
+    busyRef.current = true;
+    setConnecting(true);
+    setError('');
+    setNotice('Verifying your WhatsApp Business account…');
 
     try {
-      const res = await fetch(
-        `/api/whatsapp/status?botId=${encodeURIComponent(botId)}`,
+      const response = await fetch(CONNECT_ENDPOINT, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          botId,
+          code: signup.code,
+          wabaId: signup.wabaId,
+          phoneNumberId: signup.phoneNumberId,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'WhatsApp connection failed.');
+      }
+
+      setStatus('connected');
+      setPhoneNumber(data.phoneNumber || null);
+      setVerifiedName(data.verifiedName || null);
+      setNotice('WhatsApp Business connected successfully.');
+
+      signupRef.current = {
+        code: null,
+        wabaId: null,
+        phoneNumberId: null,
+        completed: false,
+      };
+    } catch (err) {
+      setError(err.message || 'Unable to complete WhatsApp signup.');
+      setNotice('');
+    } finally {
+      busyRef.current = false;
+      setConnecting(false);
+    }
+  }, [botId]);
+
+  // Meta returns WABA and phone IDs through window.postMessage.
+  useEffect(() => {
+    function handleMetaMessage(event) {
+      if (
+        event.origin !== 'https://www.facebook.com' &&
+        event.origin !== 'https://web.facebook.com'
+      ) {
+        return;
+      }
+
+      let payload = event.data;
+
+      if (typeof payload === 'string') {
+        try {
+          payload = JSON.parse(payload);
+        } catch {
+          return;
+        }
+      }
+
+      if (!payload || typeof payload !== 'object') return;
+
+      const eventName =
+        payload.type ||
+        payload.event ||
+        payload.data?.type;
+
+      if (eventName !== 'WA_EMBEDDED_SIGNUP') return;
+
+      const data = payload.data || {};
+
+      if (data.event === 'CANCEL') {
+        signupRef.current.completed = false;
+        setError('WhatsApp signup was cancelled.');
+        setNotice('');
+        return;
+      }
+
+      if (data.event === 'ERROR') {
+        signupRef.current.completed = false;
+        setError(data.error_message || 'Meta reported an Embedded Signup error.');
+        setNotice('');
+        return;
+      }
+
+      if (data.event === 'FINISH' || data.event === 'FINISH_ONLY_WABA') {
+        signupRef.current.wabaId =
+          data.waba_id || data.wabaId || null;
+
+        signupRef.current.phoneNumberId =
+          data.phone_number_id ||
+          data.phoneNumberId ||
+          null;
+
+        signupRef.current.completed = true;
+
+        finishSignup();
+      }
+    }
+
+    window.addEventListener('message', handleMetaMessage);
+
+    return () => {
+      window.removeEventListener('message', handleMetaMessage);
+    };
+  }, [finishSignup]);
+
+  const connectWhatsApp = () => {
+    setError('');
+    setNotice('');
+
+    if (!botId) {
+      setError('Bot ID is missing.');
+      return;
+    }
+
+    if (!window.FB || !sdkReady) {
+      setError('Meta SDK is still loading. Try again shortly.');
+      return;
+    }
+
+    signupRef.current = {
+      code: null,
+      wabaId: null,
+      phoneNumberId: null,
+      completed: false,
+    };
+
+    setConnecting(true);
+    setNotice('Opening Meta Embedded Signup…');
+
+    window.FB.login(
+      (response) => {
+        const code = response?.authResponse?.code;
+
+        if (!code) {
+          setConnecting(false);
+          setNotice('');
+
+          if (response?.status === 'unknown') {
+            setError('Signup was cancelled or authorization was not completed.');
+          } else {
+            setError('Meta did not return an authorization code. Check the Facebook Login for Business configuration.');
+          }
+
+          return;
+        }
+
+        signupRef.current.code = code;
+        setNotice('Waiting for Meta to confirm your WhatsApp Business account…');
+
+        // The FINISH event may arrive before or after the login callback.
+        finishSignup();
+      },
+      {
+        config_id: META_CONFIG_ID,
+        response_type: 'code',
+        override_default_response_type: true,
+        extras: {
+          feature: 'whatsapp_embedded_signup',
+          version: 3,
+        },
+      }
+    );
+  };
+
+  const disconnectWhatsApp = async () => {
+    if (!window.confirm('Disconnect this WhatsApp number from this bot?')) {
+      return;
+    }
+
+    setConnecting(true);
+    setError('');
+    setNotice('');
+
+    try {
+      const response = await fetch(
+        `${CONNECT_ENDPOINT}?botId=${encodeURIComponent(botId)}`,
         {
           method: 'DELETE',
+          credentials: 'same-origin',
         }
       );
 
-      if (!res.ok) {
-        throw new Error(
-          `Disconnect request failed with status ${res.status}`
-        );
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Unable to disconnect WhatsApp.');
       }
 
-      setConnectionStatus('disconnected');
-      setQrDataUrl(null);
-      setAssignedNumber('');
-
-      await fetchStatusAndQr();
-    } catch (error) {
-      console.error(
-        'Disconnect error:',
-        error?.message || error
-      );
+      setStatus('disconnected');
+      setPhoneNumber(null);
+      setVerifiedName(null);
+      setNotice('WhatsApp has been disconnected from this bot.');
+    } catch (err) {
+      setError(err.message || 'Disconnection failed.');
     } finally {
-      setIsDisconnecting(false);
+      setConnecting(false);
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 py-16 sm:py-24">
-        <div className="flex min-h-[280px] items-center justify-center">
-          <div className="flex flex-col items-center gap-3 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#0080FF]/10">
-              <Loader2 className="h-6 w-6 animate-spin text-[#0080FF]" />
-            </div>
-
-            <div>
-              <p className="text-sm font-semibold text-slate-800">
-                Checking WhatsApp connection
-              </p>
-              <p className="mt-1 text-xs text-slate-400">
-                Loading your live connection status...
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const isConnected =
-    connectionStatus === 'connected';
+  const isConnected = status === 'connected';
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-3 sm:px-5 lg:px-6 py-4 sm:py-6 lg:py-8 space-y-5 sm:space-y-6">
+    <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
+      <Link
+        href={`/bots/${botId}`}
+        className="mb-6 inline-flex items-center gap-2 text-sm text-gray-500 transition hover:text-gray-900 dark:hover:text-white"
+      >
+        <ArrowLeft size={16} />
+        Back to bot
+      </Link>
 
-      {/* HEADER */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-950">
+        <div className="border-b border-gray-200 p-5 sm:p-8 dark:border-gray-800">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400">
+              <MessageCircle size={26} />
+            </div>
 
-        <div className="flex min-w-0 items-start gap-3">
-          <Link
-            href={`/bots/${botId}`}
-            aria-label="Back to bot"
-            className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="truncate text-lg sm:text-xl font-bold tracking-tight text-slate-900">
-                WhatsApp
+            <div className="min-w-0 flex-1">
+              <h1 className="text-xl font-bold text-gray-900 sm:text-2xl dark:text-white">
+                WhatsApp Business
               </h1>
 
-              {isConnected && (
-                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-emerald-700">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
-                  Live
-                </span>
-              )}
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600 dark:text-gray-400">
+                Connect a WhatsApp Business number through Meta&apos;s official
+                Cloud API so this bot can receive and send messages.
+              </p>
             </div>
-
-            <p className="mt-0.5 text-xs sm:text-sm text-slate-500">
-              {isConnected
-                ? 'Your WhatsApp line is connected and active.'
-                : 'Connect a WhatsApp line to your AI bot.'}
-            </p>
           </div>
         </div>
 
-        {isConnected && (
-          <button
-            type="button"
-            onClick={handleDisconnect}
-            disabled={isDisconnecting}
-            className="inline-flex h-10 w-full sm:w-auto items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 text-xs font-semibold text-rose-600 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isDisconnecting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+        <div className="grid gap-6 p-5 sm:p-8 lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="rounded-xl border border-gray-200 p-5 dark:border-gray-800">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="font-semibold text-gray-900 dark:text-white">
+                Connection status
+              </h2>
+
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                  isConnected
+                    ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400'
+                    : status === 'loading' || connecting
+                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400'
+                      : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
+                }`}
+              >
+                {connecting
+                  ? 'Connecting'
+                  : status === 'loading'
+                    ? 'Loading'
+                    : isConnected
+                      ? 'Connected'
+                      : 'Disconnected'}
+              </span>
+            </div>
+
+            {isConnected ? (
+              <div className="mt-6 space-y-4">
+                <div className="flex items-start gap-3">
+                  <Phone
+                    className="mt-1 text-green-600"
+                    size={19}
+                  />
+                  <div>
+                    <p className="font-semibold text-gray-900 dark:text-white">
+                      {phoneNumber || 'WhatsApp Business number'}
+                    </p>
+                    {verifiedName && (
+                      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                        {verifiedName}
+                      </p>
+                    )}
+                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                      Connected using Meta Cloud API
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={disconnectWhatsApp}
+                  disabled={connecting}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900 dark:hover:bg-red-950"
+                >
+                  {connecting ? (
+                    <LoaderCircle className="animate-spin" size={16} />
+                  ) : (
+                    <Unplug size={16} />
+                  )}
+                  Disconnect number
+                </button>
+              </div>
             ) : (
-              <LogOut className="h-4 w-4" />
+              <div className="mt-6">
+                <p className="text-sm leading-6 text-gray-600 dark:text-gray-400">
+                  Sign in through Meta and select the WhatsApp Business
+                  account and phone number you want to connect to this bot.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={connectWhatsApp}
+                  disabled={!sdkReady || connecting || status === 'loading'}
+                  className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-green-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                >
+                  {connecting ? (
+                    <LoaderCircle className="animate-spin" size={18} />
+                  ) : (
+                    <MessageCircle size={18} />
+                  )}
+                  {connecting
+                    ? 'Connecting…'
+                    : sdkReady
+                      ? 'Connect WhatsApp Business'
+                      : 'Loading Meta…'}
+                </button>
+              </div>
             )}
 
-            {isDisconnecting
-              ? 'Disconnecting...'
-              : 'Disconnect Line'}
-          </button>
-        )}
-      </div>
-
-      {/* CONNECTED STATE */}
-      {isConnected && (
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-
-          {/* STATUS HEADER */}
-          <div className="border-b border-slate-100 p-4 sm:p-6">
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-
-              <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-sm">
-                  <CheckCircle2 className="h-6 w-6" />
-                </div>
-
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-sm sm:text-base font-bold text-slate-900">
-                      WhatsApp Connected
-                    </h2>
-
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-emerald-700">
-                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
-                      Active
-                    </span>
-                  </div>
-
-                  <p className="mt-1 truncate font-mono text-[11px] sm:text-xs text-slate-500">
-                    {assignedNumber || 'WhatsApp line connected'}
-                  </p>
-                </div>
-              </div>
-
-              <Link
-                href={`/bots/${botId}/test`}
-                className="inline-flex h-10 w-full sm:w-auto shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
+            {error && (
+              <div
+                role="alert"
+                className="mt-5 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
               >
-                <Bot className="h-4 w-4 text-[#0080FF]" />
-                Test Simulator
-              </Link>
-            </div>
-          </div>
-
-          {/* CONNECTION DETAILS */}
-          <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 sm:p-6">
-
-            <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-4">
-              <div className="flex items-start gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
-                  <Wifi className="h-4 w-4" />
-                </div>
-
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-slate-900">
-                    Connection Active
-                  </p>
-
-                  <p className="mt-1 text-[11px] leading-5 text-slate-500">
-                    Your WhatsApp session is online and ready to process incoming messages.
-                  </p>
-                </div>
+                <AlertCircle className="mt-0.5 shrink-0" size={17} />
+                <span>{error}</span>
               </div>
-            </div>
+            )}
 
-            <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
-              <div className="flex items-start gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
-                  <ShieldCheck className="h-4 w-4" />
-                </div>
-
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-slate-900">
-                    AI Automation Active
-                  </p>
-
-                  <p className="mt-1 text-[11px] leading-5 text-slate-500">
-                    Customer messages can now be processed automatically by your AI bot.
-                  </p>
-                </div>
+            {notice && !error && (
+              <div
+                role="status"
+                className="mt-5 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300"
+              >
+                {isConnected ? (
+                  <CheckCircle2 className="mt-0.5 shrink-0" size={17} />
+                ) : (
+                  <LoaderCircle className="mt-0.5 shrink-0 animate-spin" size={17} />
+                )}
+                <span>{notice}</span>
               </div>
+            )}
+
+            <button
+              type="button"
+              onClick={loadStatus}
+              disabled={connecting}
+              className="mt-5 inline-flex items-center gap-2 text-sm text-gray-500 transition hover:text-gray-900 disabled:opacity-50 dark:hover:text-white"
+            >
+              <RefreshCw size={14} />
+              Refresh status
+            </button>
+          </div>
+
+          <aside className="rounded-xl bg-gray-50 p-5 dark:bg-gray-900">
+            <div className="flex items-center gap-2">
+              <ShieldCheck
+                size={20}
+                className="text-green-600"
+              />
+              <h2 className="font-semibold text-gray-900 dark:text-white">
+                Official Cloud API
+              </h2>
             </div>
-          </div>
 
-          {/* LIVE MESSAGE */}
-          <div className="mx-4 mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:mx-6 sm:mb-6">
-            <p className="text-xs font-bold text-slate-900">
-              Your bot is ready to respond.
-            </p>
-
-            <p className="mt-1 text-[11px] sm:text-xs leading-5 text-slate-500">
-              Messages sent to{' '}
-              <strong className="font-mono text-slate-700">
-                {assignedNumber || 'your connected WhatsApp number'}
-              </strong>{' '}
-              can be automatically processed and answered by your AI bot.
-            </p>
-          </div>
+            <ul className="mt-5 space-y-4 text-sm leading-6 text-gray-600 dark:text-gray-400">
+              <li>
+                <strong className="text-gray-800 dark:text-gray-200">
+                  Secure connection
+                </strong>
+                <br />
+                Meta authorizes the selected WhatsApp Business assets.
+              </li>
+              <li>
+                <strong className="text-gray-800 dark:text-gray-200">
+                  Dedicated bot
+                </strong>
+                <br />
+                Messages are routed using the connected phone number and its
+                assigned bot.
+              </li>
+              <li>
+                <strong className="text-gray-800 dark:text-gray-200">
+                  No QR scanning
+                </strong>
+                <br />
+                This connection uses Meta&apos;s official Cloud API rather than
+                a WhatsApp Web session.
+              </li>
+            </ul>
+          </aside>
         </div>
-      )}
-
-      {/* SCANNING / DISCONNECTED STATE */}
-      {!isConnected && (
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-
-          {/* QR HEADER */}
-          <div className="border-b border-slate-100 px-4 py-5 text-center sm:px-6 sm:py-7">
-            <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-[#0080FF]/10 text-[#0080FF]">
-              <Smartphone className="h-5 w-5" />
-            </div>
-
-            <h2 className="text-base sm:text-lg font-bold text-slate-900">
-              Connect WhatsApp
-            </h2>
-
-            <p className="mx-auto mt-2 max-w-md text-xs sm:text-sm leading-5 text-slate-500">
-              Open WhatsApp on your phone and scan the QR code below to connect this bot.
-            </p>
-          </div>
-
-          {/* QR */}
-          <div className="px-4 py-6 sm:px-6 sm:py-8">
-            <div className="flex flex-col items-center">
-
-              <div className="w-full max-w-[280px] sm:max-w-[300px] aspect-square rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-3 sm:p-4">
-                <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-xl bg-white">
-                  {qrDataUrl ? (
-                    <img
-                      src={qrDataUrl}
-                      alt="WhatsApp pairing QR code"
-                      className="h-full w-full object-contain"
-                    />
-                  ) : (
-                    <div className="flex flex-col items-center gap-3 px-6 text-center">
-                      <Loader2 className="h-8 w-8 animate-spin text-[#0080FF]" />
-
-                      <div>
-                        <p className="text-xs font-semibold text-slate-700">
-                          Waiting for QR code
-                        </p>
-
-                        <p className="mt-1 text-[11px] text-slate-400">
-                          Generating a live WhatsApp pairing code...
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="mt-4 flex items-center justify-center gap-2 text-center text-[10px] sm:text-xs text-slate-400">
-                <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin text-[#0080FF]" />
-
-                <span>
-                  QR code refreshes automatically
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* INSTRUCTIONS */}
-          <div className="border-t border-slate-100 bg-slate-50/70 p-4 sm:p-6">
-            <div className="mx-auto max-w-lg rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
-
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0080FF]/10 text-[#0080FF]">
-                  <Smartphone className="h-4 w-4" />
-                </div>
-
-                <p className="text-xs sm:text-sm font-bold text-slate-900">
-                  How to connect
-                </p>
-              </div>
-
-              <ol className="mt-4 space-y-3 text-[11px] sm:text-xs leading-5 text-slate-600">
-                <li className="flex gap-3">
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-600">
-                    1
-                  </span>
-
-                  <span>
-                    Open <strong>WhatsApp</strong> on your phone.
-                  </span>
-                </li>
-
-                <li className="flex gap-3">
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-600">
-                    2
-                  </span>
-
-                  <span>
-                    Open <strong>Settings</strong> on iPhone or{' '}
-                    <strong>Menu ⋮</strong> on Android.
-                  </span>
-                </li>
-
-                <li className="flex gap-3">
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-600">
-                    3
-                  </span>
-
-                  <span>
-                    Select <strong>Linked Devices</strong>, then{' '}
-                    <strong>Link a Device</strong>.
-                  </span>
-                </li>
-
-                <li className="flex gap-3">
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-600">
-                    4
-                  </span>
-
-                  <span>
-                    Scan the QR code displayed above.
-                  </span>
-                </li>
-              </ol>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+      </section>
+    </main>
   );
 }
